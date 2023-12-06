@@ -1,0 +1,16 @@
+{
+    "name": "dtlpy-lidar",
+    "description": "",
+    "version": "0.0.1",
+    "categories": [
+        ""
+    ],
+    "icon": "",
+    "scope": "project",
+    "components": {
+        "modules": [],
+        "services": [],
+        "triggers": [],
+        "pipelines": []
+    }
+}

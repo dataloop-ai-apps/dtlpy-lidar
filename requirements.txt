@@ -1,0 +1,5 @@
+dtlpy
+scipy
+numpy
+open3d
+pandas
