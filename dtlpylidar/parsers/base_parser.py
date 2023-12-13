@@ -23,27 +23,13 @@ class LidarFileMappingParser:
         frames = self.mapping_data.get("frames", dict())
         for frame_num, frame_details in frames.items():
             # pcd_data = frame_details.get('pcd', dict())
-            try:
-                if self.absolute_path_search:
-                    print(f"Search PCD {frame_num} in the absolute path")
-                    pcd_filepath = os.path.join(self.jsons_path, frame_details.get("path")[1:])
-                    pcd_filepath = pcd_filepath.replace(".pcd", ".json")
-                    with open(pcd_filepath, 'r') as f:
-                        pcd_json = json.load(f)
-                else:
-                    raise dl.exceptions.NotFound(message="Trigger Exception")
-            except:
-                self.absolute_path_search = False
-                print(f"Search PCD {frame_num} in the relative path")
-                pcd_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], frame_details.get("path")[1:])
-                pcd_filepath = pcd_filepath.replace(".pcd", ".json")
-                with open(pcd_filepath, 'r') as f:
-                    pcd_json = json.load(f)
-            try:
-                ground_map_id = pcd_json["metadata"]["user"]["lidar_ground_detection"]["groundMapId"]
-            except (KeyError, TypeError):
-                ground_map_id = None
+            print(f"Search PCD {frame_num}")
+            pcd_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], frame_details.get("path")[1:])
+            pcd_filepath = pcd_filepath.replace(".pcd", ".json")
+            with open(pcd_filepath, 'r') as f:
+                pcd_json = json.load(f)
 
+            ground_map_id = pcd_json.get("metadata", dict()).get("user", dict()).get("lidar_ground_detection", dict()).get("groundMapId", None)
             pcd_translation = extrinsic_calibrations.Translation(
                 x=frame_details.get("position", dict()).get("x", 0),
                 y=frame_details.get("position", dict()).get("y", 0),
@@ -53,7 +39,7 @@ class LidarFileMappingParser:
                 x=frame_details.get("heading", dict()).get("x", 0),
                 y=frame_details.get("heading", dict()).get("y", 0),
                 z=frame_details.get("heading", dict()).get("z", 0),
-                w=frame_details.get("heading", dict()).get("w", 0)
+                w=frame_details.get("heading", dict()).get("w", 1)
             )
             pcd_time_stamp = frame_details.get("timestamp", "")
 
@@ -70,22 +56,11 @@ class LidarFileMappingParser:
             lidar_frame_images = list()
             frame_images = frame_details.get("images", list())
             for image_num, image_details in frame_images.items():
-                try:
-                    if self.absolute_path_search:
-                        print(f"Search image {image_num} for frame {frame_num} in the absolute path")
-                        image_filepath = os.path.join(self.jsons_path, image_details.get("image_path")[1:])
-                        image_filepath = image_filepath.replace(".png", ".json")
-                        with open(image_filepath, 'r') as f:
-                            image_json = json.load(f)
-                    else:
-                        raise dl.exceptions.NotFound(message="Trigger Exception")
-                except:
-                    self.absolute_path_search = False
-                    print(f"Search image {image_num} for frame {frame_num} in the relative path")
-                    image_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], image_details.get("image_path")[1:])
-                    image_filepath = image_filepath.replace(".png", ".json")
-                    with open(image_filepath, 'r') as f:
-                        image_json = json.load(f)
+                print(f"Search image {image_num} for frame {frame_num}")
+                image_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], image_details.get("image_path")[1:])
+                image_filepath = image_filepath.replace(".png", ".json")
+                with open(image_filepath, 'r') as f:
+                    image_json = json.load(f)
 
                 camera_id = f"{image_num}_frame_{frame_num}"
                 image_timestamp = image_details.get("timestamp")
@@ -98,7 +73,7 @@ class LidarFileMappingParser:
                     x=image_details.get("extrinsics", dict()).get("rotation").get("x", 0),
                     y=image_details.get("extrinsics", dict()).get("rotation").get("y", 0),
                     z=image_details.get("extrinsics", dict()).get("rotation").get("z", 0),
-                    w=image_details.get("extrinsics", dict()).get("rotation").get("w", 0)
+                    w=image_details.get("extrinsics", dict()).get("rotation").get("w", 1)
                 )
                 camera_intrinsic = camera_calibrations.Intrinsic(
                     fx=image_details.get("intrinsics", dict()).get("fx", 0),
