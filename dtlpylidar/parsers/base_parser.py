@@ -104,7 +104,7 @@ class LidarFileMappingParser:
                 scene_image_item = images_and_pcds.LidarImageData(
                     item_id=image_json.get("id"),
                     lidar_camera=lidar_camera,
-                    remote_path=image_filepath,
+                    remote_path=image_json.get("filename"),
                     timestamp=image_timestamp
                 )
                 lidar_frame_images.append(scene_image_item)
