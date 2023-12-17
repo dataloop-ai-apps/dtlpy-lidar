@@ -1,6 +1,6 @@
 from dtlpylidar.parser_base import extrinsic_calibrations
 from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
-import os.path
+import os
 import dtlpy as dl
 import json
 from io import BytesIO
