@@ -11,7 +11,7 @@ import shutil
 logger = logging.Logger(name="file_mapping_parser")
 
 
-class LidarFileMappingParser:
+class LidarFileMappingParser(dl.BaseServiceRunner):
     def __init__(self):
         self.mapping_data = dict()
         self.dataset = None
@@ -22,7 +22,6 @@ class LidarFileMappingParser:
         scene = lidar_scene.LidarScene()
         frames = self.mapping_data.get("frames", dict())
         for frame_num, frame_details in frames.items():
-            # pcd_data = frame_details.get('pcd', dict())
             print(f"Search PCD {frame_num}")
             pcd_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], frame_details.get("path")[1:])
             pcd_filepath = pcd_filepath.replace(".pcd", ".json")
@@ -141,8 +140,6 @@ class LidarFileMappingParser:
         self.mapping_data = json.loads(buffer.getvalue())
 
         self.dataset = mapping_item.dataset
-        # filters = dl.Filters()
-        # filters.add(field=dl.FiltersKnownFields.DIR, values="*{}*".format(mapping_item.filename))
         uid = str(uuid.uuid4())
         base_path = "{}_{}".format(self.dataset.name, uid)
         try:
@@ -161,10 +158,13 @@ class LidarFileMappingParser:
         return frames_item
 
 
-if __name__ == '__main__':
-    dl.setenv('prod')
-    item_id = "65670bf891aa0ba44da21029"
+def test_parse_data():
+    item_id = "<mapping-item-id>"
 
     parser = LidarFileMappingParser()
-    item = dl.items.get(item_id=item_id)
-    print(parser.parse_data(mapping_item=item))
+    mapping_item = dl.items.get(item_id=item_id)
+    print(parser.parse_data(mapping_item=mapping_item))
+
+
+if __name__ == '__main__':
+    test_parse_data()
