@@ -2,56 +2,8 @@ import dtlpy as dl
 import json
 import open3d as o3d
 import numpy as np
-from scipy.spatial.transform import Rotation
-import math
-
-
-class FixTransformation:
-    @staticmethod
-    def rotate_system(theta_x=None, theta_y=None, theta_z=None, radians: bool = True):
-        if radians is False:
-            theta_x = math.radians(theta_x) if theta_x else None
-            theta_y = math.radians(theta_y) if theta_y else None
-            theta_z = math.radians(theta_z) if theta_z else None
-
-        rotation = np.identity(n=4)
-        if theta_x is not None:
-            rotation_x = np.array([
-                [1, 0, 0, 0],
-                [0, math.cos(theta_x), -math.sin(theta_x), 0],
-                [0, math.sin(theta_x), math.cos(theta_x), 0],
-                [0, 0, 0, 1]
-            ])
-            rotation = rotation @ rotation_x
-        if theta_y is not None:
-            rotation_y = np.array([
-                [math.cos(theta_y), 0, math.sin(theta_y), 0],
-                [0, 1, 0, 0],
-                [-math.sin(theta_y), 0, math.cos(theta_y), 0],
-                [0, 0, 0, 1]
-            ])
-            rotation = rotation @ rotation_y
-        if theta_z is not None:
-            rotation_z = np.array([
-                [math.cos(theta_z), -math.sin(theta_z), 0, 0],
-                [math.sin(theta_z), math.cos(theta_z), 0, 0],
-                [0, 0, 1, 0],
-                [0, 0, 0, 1]
-            ])
-            rotation = rotation @ rotation_z
-        rotation[np.abs(rotation) < 1e-5] = 0
-        return rotation
-
-    @staticmethod
-    def translate_system(x=None, y=None, z=None):
-        translation = np.identity(n=4)
-        if x is not None:
-            translation[0, 3] = x
-        if y is not None:
-            translation[1, 3] = y
-        if z is not None:
-            translation[2, 3] = z
-        return translation
+from open3d.cpu.pybind.geometry import PointCloud
+import dtlpylidar.utilities.transformations as transformations
 
 
 def extract_dataloop_data(frames_item: dl.Item, frame_num: int):
@@ -93,26 +45,23 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
     pcd_filepath = dataset.items.get(item_id=pcd_data["pcd_id"]).download(local_path=".")
     pcd = o3d.io.read_point_cloud(filename=pcd_filepath)
 
-    # Calculate the Rotation
-    quaternion = np.array([
+    # Calculate the Quaternion
+    lidar_quaternion = np.array([
         pcd_data["rotation"]["x"],
         pcd_data["rotation"]["y"],
         pcd_data["rotation"]["z"],
         pcd_data["rotation"]["w"]
     ])
-    rotation = Rotation.from_quat(quaternion).as_matrix()
 
     # Calculate the Position
-    position = np.array([
+    lidar_position = np.array([
         pcd_data["translation"]["x"],
         pcd_data["translation"]["y"],
         pcd_data["translation"]["z"]
     ])
 
-    # Calculate the extrinsic matrix
-    lidar_transform_matrix = np.identity(n=4)
-    lidar_transform_matrix[0: 3, 0: 3] = rotation
-    lidar_transform_matrix[0: 3, 3] = position
+    # Calculate the transform matrix
+    lidar_transform_matrix = transformations.calc_transform(quaternion=lidar_quaternion, position=lidar_position)
     pcd.transform(lidar_transform_matrix)
 
     # Create Cameras open3d objects
@@ -138,49 +87,46 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
         ##########################################
         camera_pose = o3d.camera.PinholeCameraParameters()
 
-        # Calculate the Rotation
-        quaternion = np.array([
+        # Calculate the Quaternion
+        camera_quaternion = np.array([
             camera_data["sensor"]["extrinsic"]["rotation"]["x"],
             camera_data["sensor"]["extrinsic"]["rotation"]["y"],
             camera_data["sensor"]["extrinsic"]["rotation"]["z"],
             camera_data["sensor"]["extrinsic"]["rotation"]["w"]
         ])
-        rotation = Rotation.from_quat(quaternion).as_matrix()
 
         # Calculate the Position
-        position = np.array([
+        camera_position = np.array([
             camera_data["sensor"]["extrinsic"]["position"]["x"],
             camera_data["sensor"]["extrinsic"]["position"]["y"],
             camera_data["sensor"]["extrinsic"]["position"]["z"]
         ])
 
         # Calculate the extrinsic matrix
-        extrinsic_matrix = np.identity(n=4)
-        extrinsic_matrix[0: 3, 0: 3] = rotation
-        extrinsic_matrix[0: 3, 3] = position
-        camera_pose.extrinsic = extrinsic_matrix
+        extrinsic_matrix = transformations.calc_transform(quaternion=camera_quaternion, position=camera_position)
+        camera_pose.extrinsic = lidar_transform_matrix @ extrinsic_matrix
 
         #####################################################
         # Create a line set to represent the camera frustum #
         #####################################################
-        # TODO: find how to use create_camera_visualization correctly
-        # camera_line_set = o3d.geometry.LineSet.create_camera_visualization(
-        #     view_width_px=width,
-        #     view_height_px=height,
-        #     intrinsic=pinhole_camera.intrinsic_matrix,
-        #     extrinsic=camera_pose.extrinsic,
-        # )
-        # camera_line_set.paint_uniform_color([1, 0, 0])
-        # cameras.append(camera_line_set)
+        camera_line_set = o3d.geometry.LineSet().create_camera_visualization(
+            intrinsic=pinhole_camera,
+            extrinsic=np.identity(n=4),
+            scale=100
+        )
+        camera_line_set.paint_uniform_color([1, 0, 0])
+        camera_line_set.transform(camera_pose.extrinsic)
+        cameras.append(camera_line_set)
 
+        # Add axis to the camera
         camera_triangle = o3d.geometry.TriangleMesh().create_coordinate_frame(size=1.5)
-        camera_triangle.transform(extrinsic_matrix)
+        camera_triangle.transform(camera_pose.extrinsic)
         cameras.append(camera_triangle)
 
     return pcd, cameras
 
 
-def build_visualization(pcd: o3d.cpu.pybind.geometry.PointCloud, cameras: list, dark_mode: bool):
+def build_visualization(pcd: PointCloud, cameras: list, dark_mode: bool):
     # Initialize the Visualizer
     vis = o3d.visualization.Visualizer()
     vis.create_window(visible=True)
@@ -205,12 +151,11 @@ def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool):
 
 
 def main():
-    dl.setenv('prod')
-    item_id = "657acd78d92fde479517c7d8"
+    frames_item_id = "<frames-item-id>"
     frame_num = 0
     dark_mode = True
 
-    frames_item = dl.items.get(item_id=item_id)
+    frames_item = dl.items.get(item_id=frames_item_id)
     visualize_in_open_3d(frames_item=frames_item, frame_num=frame_num, dark_mode=dark_mode)
 
 
