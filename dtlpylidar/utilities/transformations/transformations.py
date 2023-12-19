@@ -50,7 +50,7 @@ def quaternion_from_euler(rotation_x, rotation_y, rotation_z):
     return R.from_euler('xyz', [rotation_x, rotation_y, rotation_z]).as_quat()
 
 
-def calc_translation_matrix(x_position, y_position, z_position):
+def calc_translation_matrix(x_position=0, y_position=0, z_position=0):
     """
     Calculate translation matrix from x,y,z position
     :param x_position:
@@ -64,6 +64,59 @@ def calc_translation_matrix(x_position, y_position, z_position):
         [0, 0, 1, z_position],
         [0, 0, 0, 1]
     ])
+
+
+def calc_rotation_matrix(theta_x=0, theta_y=0, theta_z=0, radians: bool = True, epsilon=1e-5):
+    """
+    Calculate rotation matrix from theta_x,theta_y,theta_z angles
+    :param theta_x:
+    :param theta_y:
+    :param theta_z:
+    :param radians: True for Radian thetas, False for Degree thetas.
+    :param epsilon: Limitation for small numbers close to zero
+    :return:
+    """
+    if radians is False:
+        theta_x = math.radians(theta_x) if theta_x else 0
+        theta_y = math.radians(theta_y) if theta_y else 0
+        theta_z = math.radians(theta_z) if theta_z else 0
+
+    rotation = np.identity(4)
+    if theta_x:
+        rotation_x = np.array([
+            [1, 0, 0, 0],
+            [0, math.cos(theta_x), -math.sin(theta_x), 0],
+            [0, math.sin(theta_x), math.cos(theta_x), 0],
+            [0, 0, 0, 1]
+        ])
+        rotation = rotation @ rotation_x
+    if theta_y:
+        rotation_y = np.array([
+            [math.cos(theta_y), 0, math.sin(theta_y), 0],
+            [0, 1, 0, 0],
+            [-math.sin(theta_y), 0, math.cos(theta_y), 0],
+            [0, 0, 0, 1]
+        ])
+        rotation = rotation @ rotation_y
+    if theta_z:
+        rotation_z = np.array([
+            [math.cos(theta_z), -math.sin(theta_z), 0, 0],
+            [math.sin(theta_z), math.cos(theta_z), 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+        rotation = rotation @ rotation_z
+    if epsilon is not None:
+        rotation[np.abs(rotation) < epsilon] = 0
+    return rotation
+
+
+def calc_transform_matrix(quaternion=np.array([0, 0, 0, 1]), position=np.array([0, 0, 0])):
+    rotation = rotation_matrix_from_quaternion(quaternion[0], quaternion[1], quaternion[2], quaternion[3])
+    transform_matrix = np.identity(n=4)
+    transform_matrix[0: 3, 0: 3] = rotation
+    transform_matrix[0: 3, 3] = position
+    return transform_matrix
 
 
 def translate_point_cloud(points, translation: Translation):
@@ -172,57 +225,3 @@ def calc_cube_points(annotation_translation, annotation_scale, annotation_rotati
                                         rotation_matrix=rotation_matrix,
                                         translation_matrix=translation_matrix)
     return cube
-
-
-def calc_transform(quaternion=np.array([0, 0, 0, 1]), position=np.array([0, 0, 0])):
-    rotation = R.from_quat(quaternion).as_matrix()
-    transform_matrix = np.identity(n=4)
-    transform_matrix[0: 3, 0: 3] = rotation
-    transform_matrix[0: 3, 3] = position
-    return transform_matrix
-
-
-def rotate_system(theta_x=None, theta_y=None, theta_z=None, radians: bool = True):
-    if radians is False:
-        theta_x = math.radians(theta_x) if theta_x else None
-        theta_y = math.radians(theta_y) if theta_y else None
-        theta_z = math.radians(theta_z) if theta_z else None
-
-    rotation = np.identity(n=4)
-    if theta_x is not None:
-        rotation_x = np.array([
-            [1, 0, 0, 0],
-            [0, math.cos(theta_x), -math.sin(theta_x), 0],
-            [0, math.sin(theta_x), math.cos(theta_x), 0],
-            [0, 0, 0, 1]
-        ])
-        rotation = rotation @ rotation_x
-    if theta_y is not None:
-        rotation_y = np.array([
-            [math.cos(theta_y), 0, math.sin(theta_y), 0],
-            [0, 1, 0, 0],
-            [-math.sin(theta_y), 0, math.cos(theta_y), 0],
-            [0, 0, 0, 1]
-        ])
-        rotation = rotation @ rotation_y
-    if theta_z is not None:
-        rotation_z = np.array([
-            [math.cos(theta_z), -math.sin(theta_z), 0, 0],
-            [math.sin(theta_z), math.cos(theta_z), 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1]
-        ])
-        rotation = rotation @ rotation_z
-    rotation[np.abs(rotation) < 1e-5] = 0
-    return rotation
-
-
-def translate_system(x=None, y=None, z=None):
-    translation = np.identity(n=4)
-    if x is not None:
-        translation[0, 3] = x
-    if y is not None:
-        translation[1, 3] = y
-    if z is not None:
-        translation[2, 3] = z
-    return translation
