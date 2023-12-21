@@ -66,14 +66,13 @@ def calc_translation_matrix(x_position=0, y_position=0, z_position=0):
     ])
 
 
-def calc_rotation_matrix(theta_x=0, theta_y=0, theta_z=0, radians: bool = True, epsilon=1e-5):
+def calc_rotation_matrix(theta_x=0, theta_y=0, theta_z=0, radians: bool = True):
     """
     Calculate rotation matrix from theta_x,theta_y,theta_z angles
     :param theta_x:
     :param theta_y:
     :param theta_z:
     :param radians: True for Radian thetas, False for Degree thetas.
-    :param epsilon: Limitation for small numbers close to zero
     :return:
     """
     if radians is False:
@@ -106,8 +105,6 @@ def calc_rotation_matrix(theta_x=0, theta_y=0, theta_z=0, radians: bool = True, 
             [0, 0, 0, 1]
         ])
         rotation = rotation @ rotation_z
-    if epsilon is not None:
-        rotation[np.abs(rotation) < epsilon] = 0
     return rotation
 
 

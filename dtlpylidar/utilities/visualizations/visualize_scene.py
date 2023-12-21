@@ -10,18 +10,19 @@ def extract_dataloop_data(frames_item: dl.Item, frame_num: int):
     # Get frames.json data
     buffer = frames_item.download(save_locally=False)
     frames_json = json.load(fp=buffer)
-    frame_data = frames_json["frames"][frame_num]
-    cameras = frames_json["cameras"]
+
+    if len(frames_json["frames"]) <= frame_num:
+        raise dl.exceptions.BadRequest(
+            status_code="400",
+            message=f"Frame {frame_num} doesn't exists in the `frames.json` item"
+        )
 
     # Extract frame pcd data
-    pcd_data = {
-        "translation": frame_data["translation"],
-        "rotation": frame_data["rotation"],
-        "pcd_id": frame_data["lidar"]["lidar_pcd_id"]
-    }
+    pcd_data = frames_json["frames"][frame_num]
 
     # Extract frame cameras data
-    images = frame_data["images"]
+    cameras = frames_json["cameras"]
+    images = pcd_data["images"]
     camera_ids = [image["camera_id"] for image in images]
     camera_id_to_image_id_map = {image["camera_id"]: image["image_id"] for image in images}
 
@@ -42,7 +43,7 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
     dataset = frames_item.dataset
 
     # Create PCD open3d object
-    pcd_filepath = dataset.items.get(item_id=pcd_data["pcd_id"]).download(local_path=".")
+    pcd_filepath = dataset.items.get(item_id=pcd_data["lidar"]["lidar_pcd_id"]).download(local_path=".")
     pcd = o3d.io.read_point_cloud(filename=pcd_filepath)
 
     # Calculate the Quaternion
@@ -61,7 +62,7 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
     ])
 
     # Calculate the transform matrix
-    lidar_transform_matrix = transformations.calc_transform(quaternion=lidar_quaternion, position=lidar_position)
+    lidar_transform_matrix = transformations.calc_transform_matrix(quaternion=lidar_quaternion, position=lidar_position)
     pcd.transform(lidar_transform_matrix)
 
     # Create Cameras open3d objects
@@ -103,7 +104,7 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
         ])
 
         # Calculate the extrinsic matrix
-        extrinsic_matrix = transformations.calc_transform(quaternion=camera_quaternion, position=camera_position)
+        extrinsic_matrix = transformations.calc_transform_matrix(quaternion=camera_quaternion, position=camera_position)
         camera_pose.extrinsic = lidar_transform_matrix @ extrinsic_matrix
 
         #####################################################
@@ -151,7 +152,7 @@ def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool):
 
 
 def main():
-    frames_item_id = "<frames-item-id>"
+    frames_item_id = "657acd78d92fde479517c7d8"
     frame_num = 0
     dark_mode = True
 
