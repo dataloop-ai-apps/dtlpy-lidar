@@ -11,7 +11,7 @@ def rotation_matrix_from_euler(rotation_x, rotation_y, rotation_z):
     :param rotation_x:
     :param rotation_y:
     :param rotation_z:
-    :return:
+    :return: 3x3 rotation matrix
     """
     return R.from_euler('xyz', [rotation_x, rotation_y, rotation_z]).as_matrix()
 
@@ -23,7 +23,7 @@ def rotation_matrix_from_quaternion(rotation_x, rotation_y, rotation_z, rotation
     :param rotation_y:
     :param rotation_z:
     :param rotation_w:
-    :return:
+    :return: 3x3 rotation matrix
     """
     return R.from_quat([rotation_x, rotation_y, rotation_z, rotation_w]).as_matrix()
 
@@ -34,7 +34,7 @@ def euler_from_quaternion(rotation_x, rotation_y, rotation_z, rotation_w):
     :param rotation_x:
     :param rotation_y:
     :param rotation_z:
-    :return:
+    :return: 3x3 rotation matrix
     """
     return R.from_quat([rotation_x, rotation_y, rotation_z, rotation_w]).as_euler('xyz')
 
@@ -45,7 +45,7 @@ def quaternion_from_euler(rotation_x, rotation_y, rotation_z):
     :param rotation_x:
     :param rotation_y:
     :param rotation_z:
-    :return:
+    :return: 3x3 rotation matrix
     """
     return R.from_euler('xyz', [rotation_x, rotation_y, rotation_z]).as_quat()
 
@@ -56,7 +56,7 @@ def calc_translation_matrix(x_position=0, y_position=0, z_position=0):
     :param x_position:
     :param y_position:
     :param z_position:
-    :return:
+    :return: 4x4 translation matrix
     """
     return np.asarray([
         [1, 0, 0, x_position],
@@ -73,43 +73,47 @@ def calc_rotation_matrix(theta_x=0, theta_y=0, theta_z=0, radians: bool = True):
     :param theta_y:
     :param theta_z:
     :param radians: True for Radian thetas, False for Degree thetas.
-    :return:
+    :return: 3x3 rotation matrix
     """
     if radians is False:
         theta_x = math.radians(theta_x) if theta_x else 0
         theta_y = math.radians(theta_y) if theta_y else 0
         theta_z = math.radians(theta_z) if theta_z else 0
 
-    rotation = np.identity(4)
+    rotation = np.identity(3)
     if theta_x:
         rotation_x = np.array([
-            [1, 0, 0, 0],
-            [0, math.cos(theta_x), -math.sin(theta_x), 0],
-            [0, math.sin(theta_x), math.cos(theta_x), 0],
-            [0, 0, 0, 1]
+            [1, 0, 0],
+            [0, math.cos(theta_x), -math.sin(theta_x)],
+            [0, math.sin(theta_x), math.cos(theta_x)]
         ])
         rotation = rotation @ rotation_x
     if theta_y:
         rotation_y = np.array([
-            [math.cos(theta_y), 0, math.sin(theta_y), 0],
-            [0, 1, 0, 0],
-            [-math.sin(theta_y), 0, math.cos(theta_y), 0],
-            [0, 0, 0, 1]
+            [math.cos(theta_y), 0, math.sin(theta_y)],
+            [0, 1, 0],
+            [-math.sin(theta_y), 0, math.cos(theta_y)]
         ])
         rotation = rotation @ rotation_y
     if theta_z:
         rotation_z = np.array([
-            [math.cos(theta_z), -math.sin(theta_z), 0, 0],
-            [math.sin(theta_z), math.cos(theta_z), 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1]
+            [math.cos(theta_z), -math.sin(theta_z), 0],
+            [math.sin(theta_z), math.cos(theta_z), 0],
+            [0, 0, 1]
         ])
         rotation = rotation @ rotation_z
     return rotation
 
 
-def calc_transform_matrix(quaternion=np.array([0, 0, 0, 1]), position=np.array([0, 0, 0])):
+def calc_transform_matrix_from_quaternion(quaternion=np.array([0, 0, 0, 1]), position=np.array([0, 0, 0])):
     rotation = rotation_matrix_from_quaternion(quaternion[0], quaternion[1], quaternion[2], quaternion[3])
+    transform_matrix = np.identity(n=4)
+    transform_matrix[0: 3, 0: 3] = rotation
+    transform_matrix[0: 3, 3] = position
+    return transform_matrix
+
+
+def calc_transform_matrix_from_rotation_matrix(rotation=np.identity(n=3), position=np.array([0, 0, 0])):
     transform_matrix = np.identity(n=4)
     transform_matrix[0: 3, 0: 3] = rotation
     transform_matrix[0: 3, 3] = position

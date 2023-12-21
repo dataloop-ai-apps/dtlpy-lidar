@@ -62,7 +62,10 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
     ])
 
     # Calculate the transform matrix
-    lidar_transform_matrix = transformations.calc_transform_matrix(quaternion=lidar_quaternion, position=lidar_position)
+    lidar_transform_matrix = transformations.calc_transform_matrix_from_quaternion(
+        quaternion=lidar_quaternion,
+        position=lidar_position
+    )
     pcd.transform(lidar_transform_matrix)
 
     # Create Cameras open3d objects
@@ -104,7 +107,10 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
         ])
 
         # Calculate the extrinsic matrix
-        extrinsic_matrix = transformations.calc_transform_matrix(quaternion=camera_quaternion, position=camera_position)
+        extrinsic_matrix = transformations.calc_transform_matrix_from_quaternion(
+            quaternion=camera_quaternion,
+            position=camera_position
+        )
         camera_pose.extrinsic = lidar_transform_matrix @ extrinsic_matrix
 
         #####################################################
