@@ -106,6 +106,12 @@ def calc_rotation_matrix(theta_x=0, theta_y=0, theta_z=0, radians: bool = True):
 
 
 def calc_transform_matrix_from_quaternion(quaternion=np.array([0, 0, 0, 1]), position=np.array([0, 0, 0])):
+    """
+    Calculate transform matrix from quaternion and position
+    :param quaternion:
+    :param position:
+    :return: 4x4 transform matrix
+    """
     rotation = rotation_matrix_from_quaternion(quaternion[0], quaternion[1], quaternion[2], quaternion[3])
     transform_matrix = np.identity(n=4)
     transform_matrix[0: 3, 0: 3] = rotation
@@ -114,6 +120,12 @@ def calc_transform_matrix_from_quaternion(quaternion=np.array([0, 0, 0, 1]), pos
 
 
 def calc_transform_matrix_from_rotation_matrix(rotation=np.identity(n=3), position=np.array([0, 0, 0])):
+    """
+    Calculate transform matrix from rotation matrix and position
+    :param rotation:
+    :param position:
+    :return: 4x4 transform matrix
+    """
     transform_matrix = np.identity(n=4)
     transform_matrix[0: 3, 0: 3] = rotation
     transform_matrix[0: 3, 3] = position
