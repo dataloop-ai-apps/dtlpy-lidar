@@ -152,7 +152,7 @@ def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool):
 
 
 def main():
-    frames_item_id = "657acd78d92fde479517c7d8"
+    frames_item_id = "<frames-item-id>"
     frame_num = 0
     dark_mode = True
 
