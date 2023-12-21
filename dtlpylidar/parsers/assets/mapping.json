@@ -1,7 +1,7 @@
 {
     "frames": {
         "0": {
-            "path": "/lidar/0.pcd",
+            "path": "lidar/0.pcd",
             "timestamp": 1631441453.299504,
             "position": {
                 "x": 0.0,
@@ -16,7 +16,7 @@
             },
             "images": {
                 "0": {
-                    "image_path": "/frames/0/0.png",
+                    "image_path": "frames/0/0.png",
                     "timestamp": 1631441453.3004656,
                     "intrinsics": {
                         "fx": 3535.294117647,
@@ -46,7 +46,7 @@
                     }
                 },
                 "1": {
-                    "image_path": "/frames/0/1.png",
+                    "image_path": "frames/0/1.png",
                     "timestamp": 1631441453.300465,
                     "intrinsics": {
                         "fx": 3535.294117647,
@@ -76,7 +76,7 @@
                     }
                 },
                 "2": {
-                    "image_path": "/frames/0/2.png",
+                    "image_path": "frames/0/2.png",
                     "timestamp": 1631441453.3004653,
                     "intrinsics": {
                         "fx": 3535.294117647,
@@ -108,7 +108,7 @@
             }
         },
         "1": {
-            "path": "/lidar/1.pcd",
+            "path": "lidar/1.pcd",
             "timestamp": 1631441453.39993,
             "position": {
                 "x": 0.0,
@@ -123,7 +123,7 @@
             },
             "images": {
                 "0": {
-                    "image_path": "/frames/1/0.png",
+                    "image_path": "frames/1/0.png",
                     "timestamp": 1631441453.400465,
                     "intrinsics": {
                         "fx": 3535.294117647,
@@ -153,7 +153,7 @@
                     }
                 },
                 "1": {
-                    "image_path": "/frames/1/1.png",
+                    "image_path": "frames/1/1.png",
                     "timestamp": 1631441453.4004645,
                     "intrinsics": {
                         "fx": 3535.294117647,
@@ -183,7 +183,7 @@
                     }
                 },
                 "2": {
-                    "image_path": "/frames/1/2.png",
+                    "image_path": "frames/1/2.png",
                     "timestamp": 1631441453.4004648,
                     "intrinsics": {
                         "fx": 3535.294117647,
