@@ -5,125 +5,115 @@ from dtlpylidar.parser_base.extrinsic_calibrations import Translation, Quaternio
 import math
 
 
-def rotation_matrix_from_euler(rotation_x, rotation_y, rotation_z):
+def rotation_matrix_from_euler(rotation_x, rotation_y, rotation_z, degrees: bool = False):
     """
     Calculate rotation matrix from euler angles (x,y,z)
-    :param rotation_x:
-    :param rotation_y:
-    :param rotation_z:
+    :param rotation_x: number
+    :param rotation_y: number
+    :param rotation_z: number
+    :param degrees: True for Degree rotations, False for Radian rotations.
     :return: 3x3 rotation matrix
     """
-    return R.from_euler('xyz', [rotation_x, rotation_y, rotation_z]).as_matrix()
+    return R.from_euler(seq='xyz', angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_matrix()
 
 
-def rotation_matrix_from_quaternion(rotation_x, rotation_y, rotation_z, rotation_w):
+def rotation_matrix_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w):
     """
     Calculate rotation matrix from quaternion angles (x,y,z,w)
-    :param rotation_x:
-    :param rotation_y:
-    :param rotation_z:
-    :param rotation_w:
+    :param quaternion_x: number
+    :param quaternion_y: number
+    :param quaternion_z: number
+    :param quaternion_w: number
     :return: 3x3 rotation matrix
     """
-    return R.from_quat([rotation_x, rotation_y, rotation_z, rotation_w]).as_matrix()
+    return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_matrix()
 
 
-def euler_from_quaternion(rotation_x, rotation_y, rotation_z, rotation_w):
+def euler_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w, degrees: bool = False):
     """
-    Calculate euler rotation (x,y,z) from quaternion angles (x,y,z,w)
-    :param rotation_x:
-    :param rotation_y:
-    :param rotation_z:
-    :return: 3x3 rotation matrix
+    Calculate euler angles (x,y,z) from quaternion angles (x,y,z,w)
+    :param quaternion_x: number
+    :param quaternion_y: number
+    :param quaternion_z: number
+    :param quaternion_w: number
+    :param degrees: True for Degree euler angles, False for Radian euler angles.
+    :return: 3x1 euler angles vector
     """
-    return R.from_quat([rotation_x, rotation_y, rotation_z, rotation_w]).as_euler('xyz')
+    return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_euler(seq='xyz', degrees=degrees)
 
 
-def quaternion_from_euler(rotation_x, rotation_y, rotation_z):
+def quaternion_from_euler(rotation_x, rotation_y, rotation_z, degrees: bool = False):
     """
-    Calculate quaternion angles (x,y,z,w) from euler rotation (x,y,z)
-    :param rotation_x:
-    :param rotation_y:
-    :param rotation_z:
-    :return: 3x3 rotation matrix
+    Calculate quaternion angles (x,y,z,w) from euler angles (x,y,z)
+    :param rotation_x: number
+    :param rotation_y: number
+    :param rotation_z: number
+    :param degrees: True for Degree rotations, False for Radian rotations.
+    :return: 4x1 quaternion angles vector
     """
-    return R.from_euler('xyz', [rotation_x, rotation_y, rotation_z]).as_quat()
+    return R.from_euler(seq='xyz', angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_quat()
 
 
-def calc_translation_matrix(x_position=0, y_position=0, z_position=0):
+def calc_translation_matrix(position_x=0.0, position_y=0.0, position_z=0.0):
     """
-    Calculate translation matrix from x,y,z position
-    :param x_position:
-    :param y_position:
-    :param z_position:
+    Calculate translation matrix from position (x,y,z)
+    :param position_x: number
+    :param position_y: number
+    :param position_z: number
     :return: 4x4 translation matrix
     """
     return np.asarray([
-        [1, 0, 0, x_position],
-        [0, 1, 0, y_position],
-        [0, 0, 1, z_position],
+        [1, 0, 0, position_x],
+        [0, 1, 0, position_y],
+        [0, 0, 1, position_z],
         [0, 0, 0, 1]
     ])
 
 
-def calc_rotation_matrix(theta_x=0, theta_y=0, theta_z=0, radians: bool = True):
+def calc_rotation_matrix(theta_x=0.0, theta_y=0.0, theta_z=0.0, degrees: bool = True):
     """
-    Calculate rotation matrix from theta_x,theta_y,theta_z angles
-    :param theta_x:
-    :param theta_y:
-    :param theta_z:
-    :param radians: True for Radian thetas, False for Degree thetas.
+    Calculate rotation matrix from theta angles (x,y,z)
+    :param theta_x: number
+    :param theta_y: number
+    :param theta_z: number
+    :param degrees: True for Degree thetas, False for Radian thetas.
     :return: 3x3 rotation matrix
     """
-    if radians is False:
-        theta_x = math.radians(theta_x) if theta_x else 0
-        theta_y = math.radians(theta_y) if theta_y else 0
-        theta_z = math.radians(theta_z) if theta_z else 0
+    if degrees is True:
+        theta_x = math.radians(theta_x) if theta_x != 0.0 else 0.0
+        theta_y = math.radians(theta_y) if theta_y != 0.0 else 0.0
+        theta_z = math.radians(theta_z) if theta_z != 0.0 else 0.0
 
     rotation = np.identity(3)
-    if theta_x:
+    if theta_x != 0.0:
         rotation_x = np.array([
-            [1, 0, 0],
-            [0, math.cos(theta_x), -math.sin(theta_x)],
-            [0, math.sin(theta_x), math.cos(theta_x)]
+            [1.0, 0.0, 0.0],
+            [0.0, math.cos(theta_x), -math.sin(theta_x)],
+            [0.0, math.sin(theta_x), math.cos(theta_x)]
         ])
         rotation = rotation @ rotation_x
-    if theta_y:
+    if theta_y != 0.0:
         rotation_y = np.array([
-            [math.cos(theta_y), 0, math.sin(theta_y)],
-            [0, 1, 0],
-            [-math.sin(theta_y), 0, math.cos(theta_y)]
+            [math.cos(theta_y), 0.0, math.sin(theta_y)],
+            [0.0, 1.0, 0.0],
+            [-math.sin(theta_y), 0.0, math.cos(theta_y)]
         ])
         rotation = rotation @ rotation_y
-    if theta_z:
+    if theta_z != 0.0:
         rotation_z = np.array([
-            [math.cos(theta_z), -math.sin(theta_z), 0],
-            [math.sin(theta_z), math.cos(theta_z), 0],
-            [0, 0, 1]
+            [math.cos(theta_z), -math.sin(theta_z), 0.0],
+            [math.sin(theta_z), math.cos(theta_z), 0.0],
+            [0.0, 0.0, 1.0]
         ])
         rotation = rotation @ rotation_z
     return rotation
 
 
-def calc_transform_matrix_from_quaternion(quaternion=np.array([0, 0, 0, 1]), position=np.array([0, 0, 0])):
-    """
-    Calculate transform matrix from quaternion and position
-    :param quaternion:
-    :param position:
-    :return: 4x4 transform matrix
-    """
-    rotation = rotation_matrix_from_quaternion(quaternion[0], quaternion[1], quaternion[2], quaternion[3])
-    transform_matrix = np.identity(n=4)
-    transform_matrix[0: 3, 0: 3] = rotation
-    transform_matrix[0: 3, 3] = position
-    return transform_matrix
-
-
-def calc_transform_matrix_from_rotation_matrix(rotation=np.identity(n=3), position=np.array([0, 0, 0])):
+def calc_transform_matrix(rotation=np.identity(n=3), position=np.array([0.0, 0.0, 0.0])):
     """
     Calculate transform matrix from rotation matrix and position
-    :param rotation:
-    :param position:
+    :param rotation: 3x3 matrix
+    :param position: 3x1 vector
     :return: 4x4 transform matrix
     """
     transform_matrix = np.identity(n=4)
@@ -157,10 +147,10 @@ def rotate_point_cloud(points, rotation):
                                                      rotation_y=rotation_vec[1],
                                                      rotation_z=rotation_vec[2])
     else:
-        rotation_matrix = rotation_matrix_from_quaternion(rotation_x=rotation_vec[0],
-                                                          rotation_y=rotation_vec[1],
-                                                          rotation_z=rotation_vec[2],
-                                                          rotation_w=rotation_vec[3])
+        rotation_matrix = rotation_matrix_from_quaternion(quaternion_x=rotation_vec[0],
+                                                          quaternion_y=rotation_vec[1],
+                                                          quaternion_z=rotation_vec[2],
+                                                          quaternion_w=rotation_vec[3])
 
     return np.dot(np.linalg.inv(rotation_matrix), points.transpose()).transpose()
 
@@ -201,39 +191,39 @@ def calc_cube_points(annotation_translation, annotation_scale, annotation_rotati
     :param apply_rotation: Apply rotation to the cube
     :return:
     """
-    x_scale = annotation_scale[0]
-    y_scale = annotation_scale[1]
-    z_scale = annotation_scale[2]
+    scale_x = annotation_scale[0]
+    scale_y = annotation_scale[1]
+    scale_z = annotation_scale[2]
 
-    x_position = annotation_translation[0]
-    y_position = annotation_translation[1]
-    z_position = annotation_translation[2]
+    position_x = annotation_translation[0]
+    position_y = annotation_translation[1]
+    position_z = annotation_translation[2]
 
     cube = np.asarray([
-        [x_position + x_scale / 2, y_position + y_scale / 2, z_position + z_scale / 2],
-        [x_position + x_scale / 2, y_position + y_scale / 2, z_position - z_scale / 2],
-        [x_position + x_scale / 2, y_position - y_scale / 2, z_position + z_scale / 2],
-        [x_position + x_scale / 2, y_position - y_scale / 2, z_position - z_scale / 2],
-        [x_position - x_scale / 2, y_position + y_scale / 2, z_position + z_scale / 2],
-        [x_position - x_scale / 2, y_position + y_scale / 2, z_position - z_scale / 2],
-        [x_position - x_scale / 2, y_position - y_scale / 2, z_position + z_scale / 2],
-        [x_position - x_scale / 2, y_position - y_scale / 2, z_position - z_scale / 2],
+        [position_x + scale_x / 2, position_y + scale_y / 2, position_z + scale_z / 2],
+        [position_x + scale_x / 2, position_y + scale_y / 2, position_z - scale_z / 2],
+        [position_x + scale_x / 2, position_y - scale_y / 2, position_z + scale_z / 2],
+        [position_x + scale_x / 2, position_y - scale_y / 2, position_z - scale_z / 2],
+        [position_x - scale_x / 2, position_y + scale_y / 2, position_z + scale_z / 2],
+        [position_x - scale_x / 2, position_y + scale_y / 2, position_z - scale_z / 2],
+        [position_x - scale_x / 2, position_y - scale_y / 2, position_z + scale_z / 2],
+        [position_x - scale_x / 2, position_y - scale_y / 2, position_z - scale_z / 2],
     ])
 
     if apply_rotation is True:
         if annotation_rotation is None:
             raise Exception("Rotation must be provided")
-        x_rotation = annotation_rotation[0]
-        y_rotation = annotation_rotation[1]
-        z_rotation = annotation_rotation[2]
+        rotation_x = annotation_rotation[0]
+        rotation_y = annotation_rotation[1]
+        rotation_z = annotation_rotation[2]
         rotation_matrix = rotation_matrix_from_euler(
-            rotation_x=x_rotation,
-            rotation_y=y_rotation,
-            rotation_z=z_rotation)
+            rotation_x=rotation_x,
+            rotation_y=rotation_y,
+            rotation_z=rotation_z)
         translation_matrix = calc_translation_matrix(
-            x_position=x_position,
-            y_position=y_position,
-            z_position=z_position)
+            position_x=position_x,
+            position_y=position_y,
+            position_z=position_z)
         cube = rotate_annotation_cube3d(annotation_corners=cube,
                                         rotation_matrix=rotation_matrix,
                                         translation_matrix=translation_matrix)

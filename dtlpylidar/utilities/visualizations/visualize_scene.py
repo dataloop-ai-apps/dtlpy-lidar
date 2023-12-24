@@ -12,10 +12,7 @@ def extract_dataloop_data(frames_item: dl.Item, frame_num: int):
     frames_json = json.load(fp=buffer)
 
     if len(frames_json["frames"]) <= frame_num:
-        raise dl.exceptions.BadRequest(
-            status_code="400",
-            message=f"Frame {frame_num} doesn't exists in the `frames.json` item"
-        )
+        raise IndexError(f"Frame {frame_num} doesn't exists in the `frames.json` item")
 
     # Extract frame pcd data
     pcd_data = frames_json["frames"][frame_num]
@@ -62,8 +59,14 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
     ])
 
     # Calculate the transform matrix
-    lidar_transform_matrix = transformations.calc_transform_matrix_from_quaternion(
-        quaternion=lidar_quaternion,
+    lidar_rotation = transformations.rotation_matrix_from_quaternion(
+        quaternion_x=lidar_quaternion[0],
+        quaternion_y=lidar_quaternion[1],
+        quaternion_z=lidar_quaternion[2],
+        quaternion_w=lidar_quaternion[3]
+    )
+    lidar_transform_matrix = transformations.calc_transform_matrix(
+        rotation=lidar_rotation,
         position=lidar_position
     )
     pcd.transform(lidar_transform_matrix)
@@ -107,8 +110,14 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
         ])
 
         # Calculate the extrinsic matrix
-        extrinsic_matrix = transformations.calc_transform_matrix_from_quaternion(
-            quaternion=camera_quaternion,
+        camera_rotation = transformations.rotation_matrix_from_quaternion(
+            quaternion_x=camera_quaternion[0],
+            quaternion_y=camera_quaternion[1],
+            quaternion_z=camera_quaternion[2],
+            quaternion_w=camera_quaternion[3]
+        )
+        extrinsic_matrix = transformations.calc_transform_matrix(
+            rotation=camera_rotation,
             position=camera_position
         )
         camera_pose.extrinsic = lidar_transform_matrix @ extrinsic_matrix
