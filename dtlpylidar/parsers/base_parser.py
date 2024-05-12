@@ -141,9 +141,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.mapping_data = json.loads(buffer.getvalue())
 
         self.dataset = mapping_item.dataset
-        uid = str(uuid.uuid4())
-        base_dataset_name = self.dataset.name.replace(":", "-")
-        base_path = "{}_{}".format(base_dataset_name, uid)
+        base_path = str(uuid.uuid4())
         try:
             items_download_path = os.path.join(os.getcwd(), base_path)
             self.dataset.items.download(local_path=items_download_path,
