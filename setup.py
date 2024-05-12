@@ -19,7 +19,7 @@ packages = [
     package for package in find_packages() if package.startswith('dtlpylidar')
 ]
 
-setup(name='dtlpymetrics',
+setup(name='dtlpylidar',
       classifiers=[
           'Programming Language :: Python :: 3.7',
           'Programming Language :: Python :: 3.8',
