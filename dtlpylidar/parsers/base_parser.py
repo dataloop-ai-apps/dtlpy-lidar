@@ -57,7 +57,8 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
             for image_num, image_details in frame_images.items():
                 logger.info(f"Search image {image_num} for frame {frame_num}")
                 image_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], image_details.get("image_path"))
-                image_filepath = image_filepath.replace(".png", ".json")
+                image_ext = os.path.splitext(image_filepath)[1]
+                image_filepath = image_filepath.replace(image_ext, ".json")
                 with open(image_filepath, 'r') as f:
                     image_json = json.load(f)
 
@@ -140,8 +141,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.mapping_data = json.loads(buffer.getvalue())
 
         self.dataset = mapping_item.dataset
-        uid = str(uuid.uuid4())
-        base_path = "{}_{}".format(self.dataset.name, uid)
+        base_path = str(uuid.uuid4())
         try:
             items_download_path = os.path.join(os.getcwd(), base_path)
             self.dataset.items.download(local_path=items_download_path,
