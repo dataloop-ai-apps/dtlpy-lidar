@@ -11,7 +11,7 @@ import shutil
 logger = logging.Logger(name="file_mapping_parser")
 
 
-class LidarFileMappingParser(dl.BaseServiceRunner):
+class LidarFileMappingParser:
     def __init__(self):
         self.mapping_data = dict()
         self.dataset = None
@@ -28,7 +28,8 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
             with open(pcd_filepath, 'r') as f:
                 pcd_json = json.load(f)
 
-            ground_map_id = pcd_json.get("metadata", dict()).get("user", dict()).get("lidar_ground_detection", dict()).get("groundMapId", None)
+            ground_map_id = pcd_json.get("metadata", dict()).get("user", dict()).get(
+                "lidar_ground_detection", dict()).get("groundMapId", None)
             pcd_translation = extrinsic_calibrations.Translation(
                 x=frame_details.get("position", dict()).get("x", 0),
                 y=frame_details.get("position", dict()).get("y", 0),
@@ -141,11 +142,12 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.mapping_data = json.loads(buffer.getvalue())
 
         self.dataset = mapping_item.dataset
-        base_path = str(uuid.uuid4())
+        uid = str(uuid.uuid4())
+        base_dataset_name = self.dataset.name.replace(":", "-")
+        base_path = "{}_{}".format(base_dataset_name, uid)
         try:
             items_download_path = os.path.join(os.getcwd(), base_path)
-            self.dataset.items.download(local_path=items_download_path,
-                                        annotation_options=dl.ViewAnnotationOptions.JSON)
+            self.dataset.download_annotations(local_path=items_download_path)
             self.jsons_path = os.path.join(items_download_path, "json")
             frames_item = self.parse_lidar_data(mapping_item=mapping_item)
         finally:
