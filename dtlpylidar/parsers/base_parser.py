@@ -11,7 +11,7 @@ import shutil
 logger = logging.Logger(name="file_mapping_parser")
 
 
-class LidarFileMappingParser:
+class LidarFileMappingParser(dl.BaseServiceRunner):
     def __init__(self):
         self.mapping_data = dict()
         self.dataset = None
@@ -143,7 +143,7 @@ class LidarFileMappingParser:
 
         self.dataset = mapping_item.dataset
         uid = str(uuid.uuid4())
-        base_dataset_name = self.dataset.name.replace(":", "-")
+        base_dataset_name = self.dataset.name
         base_path = "{}_{}".format(base_dataset_name, uid)
         try:
             items_download_path = os.path.join(os.getcwd(), base_path)
