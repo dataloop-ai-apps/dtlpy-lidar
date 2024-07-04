@@ -95,7 +95,7 @@ class PandaSetParser(dl.BaseServiceRunner):
     def extract_pcd_calibrations(folder, dataset):
         filters_json = dl.Filters()
         filters_json.add(field="metadata.system.mimetype", values="*json")
-        filters_json.add(field=dl.FiltersKnownFields.DIR, values="{}/velodyne_points*".format(folder))
+        filters_json.add(field=dl.FiltersKnownFields.DIR, values="/{}/velodyne_points*".format(folder))
         calibration_files = dataset.items.list(filters=filters_json)
         extrinsics = None
         for item in calibration_files.all():
@@ -105,12 +105,12 @@ class PandaSetParser(dl.BaseServiceRunner):
         return extrinsics
 
     def sort_images_by_frame(self, dataset, folder_name):
-        image_folders = [f'{folder_name}/front_camera',
-                         f'{folder_name}/front_left_camera',
-                         f'{folder_name}/left_camera',
-                         f'{folder_name}/back_camera',
-                         f'{folder_name}/right_camera',
-                         f'{folder_name}/front_right_camera']
+        image_folders = [f'/{folder_name}/front_camera',
+                         f'/{folder_name}/front_left_camera',
+                         f'/{folder_name}/left_camera',
+                         f'/{folder_name}/back_camera',
+                         f'/{folder_name}/right_camera',
+                         f'/{folder_name}/front_right_camera']
 
         sorted_images = dict()
         for folder in image_folders:
@@ -144,7 +144,7 @@ class PandaSetParser(dl.BaseServiceRunner):
 
     def extract_sort_pcds(self, dataset: dl.Dataset, folder_name):
         pcd_filters = dl.Filters()
-        pcd_filters.add(field=dl.FiltersKnownFields.DIR, values=f'{folder_name}/velodyne_points')
+        pcd_filters.add(field=dl.FiltersKnownFields.DIR, values=f'/{folder_name}/velodyne_points')
         pcd_filters.add(field=dl.FiltersKnownFields.FILENAME, values='*.pcd')
         pcds = list(dataset.items.list(filters=pcd_filters).all())
         sorted_pcds = sorted(pcds, key=lambda x: int(x.name.split('.pcd')[0]))
