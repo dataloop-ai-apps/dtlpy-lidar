@@ -17,6 +17,16 @@ def rotation_matrix_from_euler(rotation_x=0.0, rotation_y=0.0, rotation_z=0.0, d
     return R.from_euler(seq='xyz', angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_matrix()
 
 
+def euler_from_rotation_matrix(rotation_matrix=np.identity(3), degrees: bool = False):
+    """
+    Calculate euler angles (x,y,z) from rotation matrix
+    :param rotation_matrix: 3x3 rotation matrix
+    :param degrees: True for Degree euler angles, False for Radian euler angles.
+    :return: 3x1 euler angles vector
+    """
+    return R.from_matrix(rotation_matrix).as_euler(seq='xyz', degrees=degrees)
+
+
 def rotation_matrix_from_quaternion(quaternion_x=0.0, quaternion_y=0.0, quaternion_z=0.0, quaternion_w=1.0):
     """
     Calculate rotation matrix from quaternion angles (x,y,z,w)
@@ -27,6 +37,15 @@ def rotation_matrix_from_quaternion(quaternion_x=0.0, quaternion_y=0.0, quaterni
     :return: 3x3 rotation matrix
     """
     return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_matrix()
+
+
+def quaternion_from_rotation_matrix(rotation_matrix=np.identity(3)):
+    """
+    Calculate quaternion angles (x,y,z,w) from rotation matrix
+    :param rotation_matrix: 3x3 rotation matrix
+    :return: 4x1 quaternion angles vector
+    """
+    return R.from_matrix(rotation_matrix).as_quat()
 
 
 def euler_from_quaternion(quaternion_x=0.0, quaternion_y=0.0, quaternion_z=0.0, quaternion_w=1.0, degrees: bool = False):
@@ -52,6 +71,24 @@ def quaternion_from_euler(rotation_x=0.0, rotation_y=0.0, rotation_z=0.0, degree
     :return: 4x1 quaternion angles vector
     """
     return R.from_euler(seq='xyz', angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_quat()
+
+
+def translation_vector_from_transform_matrix(transform_matrix=np.identity(4)):
+    """
+    Extract position (x,y,z) from transform matrix
+    :param transform_matrix: 4x4 transform matrix
+    :return: 3x1 translation vector
+    """
+    return transform_matrix[0: 3, 3]
+
+
+def rotation_matrix_from_transform_matrix(transform_matrix=np.identity(4)):
+    """
+    Extract rotation matrix from transform matrix
+    :param transform_matrix: 4x4 transform matrix
+    :return: 3x3 rotation matrix
+    """
+    return transform_matrix[0: 3, 0: 3]
 
 
 def calc_translation_matrix(position_x=0.0, position_y=0.0, position_z=0.0):
