@@ -5,7 +5,7 @@ from dtlpylidar.parser_base.extrinsic_calibrations import Translation, Quaternio
 import math
 
 
-def rotation_matrix_from_euler(rotation_x, rotation_y, rotation_z, degrees: bool = False):
+def rotation_matrix_from_euler(rotation_x=0.0, rotation_y=0.0, rotation_z=0.0, degrees: bool = False):
     """
     Calculate rotation matrix from euler angles (x,y,z)
     :param rotation_x: number
@@ -17,7 +17,7 @@ def rotation_matrix_from_euler(rotation_x, rotation_y, rotation_z, degrees: bool
     return R.from_euler(seq='xyz', angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_matrix()
 
 
-def rotation_matrix_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w):
+def rotation_matrix_from_quaternion(quaternion_x=0.0, quaternion_y=0.0, quaternion_z=0.0, quaternion_w=1.0):
     """
     Calculate rotation matrix from quaternion angles (x,y,z,w)
     :param quaternion_x: number
@@ -29,7 +29,7 @@ def rotation_matrix_from_quaternion(quaternion_x, quaternion_y, quaternion_z, qu
     return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_matrix()
 
 
-def euler_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w, degrees: bool = False):
+def euler_from_quaternion(quaternion_x=0.0, quaternion_y=0.0, quaternion_z=0.0, quaternion_w=1.0, degrees: bool = False):
     """
     Calculate euler angles (x,y,z) from quaternion angles (x,y,z,w)
     :param quaternion_x: number
@@ -42,7 +42,7 @@ def euler_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w
     return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_euler(seq='xyz', degrees=degrees)
 
 
-def quaternion_from_euler(rotation_x, rotation_y, rotation_z, degrees: bool = False):
+def quaternion_from_euler(rotation_x=0.0, rotation_y=0.0, rotation_z=0.0, degrees: bool = False):
     """
     Calculate quaternion angles (x,y,z,w) from euler angles (x,y,z)
     :param rotation_x: number
@@ -109,7 +109,7 @@ def calc_rotation_matrix(theta_x=0.0, theta_y=0.0, theta_z=0.0, degrees: bool = 
     return rotation
 
 
-def calc_transform_matrix(rotation=np.identity(n=3), position=np.array([0.0, 0.0, 0.0])):
+def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3)):
     """
     Calculate transform matrix from rotation matrix and position
     :param rotation: 3x3 matrix
@@ -120,6 +120,35 @@ def calc_transform_matrix(rotation=np.identity(n=3), position=np.array([0.0, 0.0
     transform_matrix[0: 3, 0: 3] = rotation
     transform_matrix[0: 3, 3] = position
     return transform_matrix
+
+
+def apply_translation(transform_matrix=np.identity(4), translation_vector=np.zeros(3)):
+    """
+    Apply translation matrix to transform matrix
+    :param transform_matrix: 4x4 transform matrix
+    :param translation_vector: 3x1 translation vector
+    :return: 4x4 transform matrix
+    """
+    new_transform = transform_matrix.copy()
+    new_transform[:3, 3] += translation_vector
+    return new_transform
+
+
+def apply_rotation(transform_matrix=np.identity(4), rotation_matrix=np.identity(3), from_right=True):
+    """
+    Apply translation matrix to transform matrix
+    :param transform_matrix: 4x4 transform matrix
+    :param rotation_matrix: 3x3 rotation vector
+    :param from_right: True to apply rotation from right, False to apply rotation from left
+    :return: 4x4 transform matrix
+    """
+    new_transform = transform_matrix.copy()
+    rotation_transform = calc_transform_matrix(rotation=rotation_matrix, position=np.zeros(3))
+    if from_right is True:
+        new_transform = np.dot(new_transform, rotation_transform)
+    else:
+        new_transform = np.dot(rotation_transform, new_transform)
+    return new_transform
 
 
 def translate_point_cloud(points, translation: Translation):
