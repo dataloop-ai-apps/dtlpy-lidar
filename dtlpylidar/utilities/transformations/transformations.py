@@ -124,7 +124,7 @@ def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3)):
 
 def apply_translation(transform_matrix=np.identity(4), translation_vector=np.zeros(3)):
     """
-    Apply translation matrix to transform matrix
+    Apply translation matrix to a 4x4 transformation matrix.
     :param transform_matrix: 4x4 transform matrix
     :param translation_vector: 3x1 translation vector
     :return: 4x4 transform matrix
@@ -134,20 +134,43 @@ def apply_translation(transform_matrix=np.identity(4), translation_vector=np.zer
     return new_transform
 
 
-def apply_rotation(transform_matrix=np.identity(4), rotation_matrix=np.identity(3), from_right=True):
+def apply_rotation(transform_matrix=np.identity(4), rotation_matrix=np.identity(3),
+                   from_right=True, rotate_around=None):
     """
-    Apply translation matrix to transform matrix
+    Apply rotation matrix to a 4x4 transformation matrix.
     :param transform_matrix: 4x4 transform matrix
     :param rotation_matrix: 3x3 rotation vector
     :param from_right: True to apply rotation from right, False to apply rotation from left
+    :param rotate_around: 3x1 vector representing the point to rotate around
+     (default is None, which means rotate around the object's center).
     :return: 4x4 transform matrix
     """
     new_transform = transform_matrix.copy()
     rotation_transform = calc_transform_matrix(rotation=rotation_matrix, position=np.zeros(3))
-    if from_right is True:
-        new_transform = np.dot(new_transform, rotation_transform)
+
+    # Rotate around a specific point
+    if rotate_around is not None:
+        translation = new_transform[:3, 3]
+        direction_vector = np.array(rotate_around) - translation
+
+        # Translate object so that 'rotate_around' becomes the origin
+        new_transform = apply_translation(new_transform, direction_vector)
+
+        if from_right is True:
+            new_transform = np.dot(new_transform, rotation_transform)
+        else:
+            new_transform = np.dot(rotation_transform, new_transform)
+
+        # Translate object back, accounting for rotation
+        rotated_direction = np.dot(rotation_matrix, -direction_vector)
+        new_transform = apply_translation(new_transform, rotated_direction)
     else:
-        new_transform = np.dot(rotation_transform, new_transform)
+        # Rotate around the object's center
+        if from_right is True:
+            new_transform = np.dot(new_transform, rotation_transform)
+        else:
+            new_transform = np.dot(rotation_transform, new_transform)
+
     return new_transform
 
 
