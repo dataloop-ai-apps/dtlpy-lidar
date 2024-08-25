@@ -195,11 +195,12 @@ def apply_rotation(transform_matrix=np.identity(4), rotation_matrix=np.identity(
 
         if from_right is True:
             new_transform = np.dot(new_transform, rotation_transform)
+            rotated_direction = np.dot(rotation_matrix, -direction_vector)
         else:
             new_transform = np.dot(rotation_transform, new_transform)
+            rotated_direction = np.dot(-direction_vector, rotation_matrix)
 
         # Translate object back, accounting for rotation
-        rotated_direction = np.dot(rotation_matrix, -direction_vector)
         new_transform = apply_translation(new_transform, rotated_direction)
     else:
         # Rotate around the object's center
