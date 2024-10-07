@@ -176,10 +176,10 @@ def apply_rotation(transform_matrix=np.identity(4), rotation_matrix=np.identity(
     """
     Apply rotation matrix to a 4x4 transformation matrix.
     :param transform_matrix: 4x4 transform matrix
-    :param rotation_matrix: 3x3 rotation vector
+    :param rotation_matrix: 3x3 rotation matrix
     :param from_right: True to apply rotation from right, False to apply rotation from left
     :param rotate_around: 3x1 vector representing the point to rotate around
-     (default is None, which means rotate around the object's center).
+    (default is None, which means rotate around the object's center).
     :return: 4x4 transform matrix
     """
     new_transform = transform_matrix.copy()
@@ -199,8 +199,8 @@ def apply_rotation(transform_matrix=np.identity(4), rotation_matrix=np.identity(
             new_transform = np.dot(rotation_transform, new_transform)
 
         # Rotate the direction vector and translate back
-        rotated_direction = np.dot(rotation_matrix, direction_vector)
-        new_transform = apply_translation(new_transform, rotated_direction)
+        rotated_direction_vector = np.dot(rotation_matrix, direction_vector)
+        new_transform = apply_translation(new_transform, rotated_direction_vector)
     else:
         # Rotate around the object's center
         if from_right is True:
@@ -208,6 +208,22 @@ def apply_rotation(transform_matrix=np.identity(4), rotation_matrix=np.identity(
         else:
             new_transform = np.dot(rotation_transform, new_transform)
 
+    return new_transform
+
+
+def apply_translation_in_rotation_direction(transform_matrix=np.identity(4),
+                                            rotation_matrix=np.identity(3), translation_vector=np.zeros(3)):
+    """
+    Apply translation in the direction of the rotation matrix to a 4x4 transformation matrix.
+    :param transform_matrix: 4x4 transform matrix
+    :param rotation_matrix: 3x3 rotation matrix
+    :param translation_vector: 3x1 translation vector
+    :return: 4x4 transform matrix
+    """
+    new_transform = transform_matrix.copy()
+
+    rotated_direction_vector = np.dot(rotation_matrix, translation_vector)
+    new_transform = apply_translation(new_transform, rotated_direction_vector)
     return new_transform
 
 
