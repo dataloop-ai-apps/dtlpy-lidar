@@ -1,3 +1,5 @@
+from typing_extensions import override
+
 from dtlpylidar.parser_base import extrinsic_calibrations
 from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
 import os
@@ -13,17 +15,21 @@ logger = logging.Logger(name="file_base_parser")
 
 class LidarBaseParser(dl.BaseServiceRunner):
     @staticmethod
-    def sort_cameras(self) -> list:
+    def sort_pcds_by_frames(**kwargs) -> list:
         pass
 
     @staticmethod
-    def sort_pcds(self) -> list:
+    def sort_cameras_by_frames(**kwargs) -> list:
         pass
 
-    @staticmethod
-    def parse_calibration_data(**kwargs) -> dict:
-        raise NotImplementedError
+    # TODO: Override this method in the derived class
+    def parse_calibration_data(self, dataset: dl.Dataset, remote_path: str) -> dict:
+        calibration_data = dict()
+        pcds_sorted_data = self.sort_pcds_by_frames(dataset=dataset, remote_path=remote_path)
+        images_sorted_data = self.sort_cameras_by_frames(dataset=dataset, remote_path=remote_path)
+        return calibration_data
 
+    # TODO: remove jsons_path as it will be used in parse_calibration_data
     @staticmethod
     def parse_lidar_data(jsons_path: str, calibration_data: dict):
         scene = lidar_scene.LidarScene()
@@ -142,7 +148,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
             calibration_data = self.parse_calibration_data(
                 dataset=dataset,
-                remote_path=remote_path
+                remote_path=f"/{remote_path}/"
             )
             buffer = self.parse_lidar_data(
                 jsons_path=jsons_path,
