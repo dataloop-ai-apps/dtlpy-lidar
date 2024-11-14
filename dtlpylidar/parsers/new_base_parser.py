@@ -46,9 +46,9 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
             lidar_data = {
                 "path": pathlib.Path(lidar_json).absolute(),
-                "timestamp": timestamps_json_data["root"][lidar_frame_idx],
-                "position": poses_json_data["root"][lidar_frame_idx]["position"],
-                "heading": poses_json_data["root"][lidar_frame_idx]["heading"],
+                "timestamp": timestamps_json_data[lidar_frame_idx],
+                "position": poses_json_data[lidar_frame_idx]["position"],
+                "heading": poses_json_data[lidar_frame_idx]["heading"],
                 "cameras": dict()
             }
             calibration_data["frames"][str(lidar_frame_idx)] = lidar_data
@@ -74,16 +74,16 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
                 camera_data = {
                     "path": pathlib.Path(camera_json).absolute(),
-                    "timestamp": timestamps_json_data["root"][camera_frame_idx],
+                    "timestamp": timestamps_json_data[camera_frame_idx],
                     "intrinsics": {
-                        "fx": intrinsics_json_data["root"]["fx"],
-                        "fy": intrinsics_json_data["root"]["fy"],
-                        "cx": intrinsics_json_data["root"]["cx"],
-                        "cy": intrinsics_json_data["root"]["cy"]
+                        "fx": intrinsics_json_data["fx"],
+                        "fy": intrinsics_json_data["fy"],
+                        "cx": intrinsics_json_data["cx"],
+                        "cy": intrinsics_json_data["cy"]
                     },
                     "extrinsics": {
-                        "position": poses_json_data["root"][camera_frame_idx]["position"],
-                        "heading": poses_json_data["root"][camera_frame_idx]["heading"],
+                        "position": poses_json_data[camera_frame_idx]["position"],
+                        "heading": poses_json_data[camera_frame_idx]["heading"],
                     },
                     "distortion": {
                         "k1": 0,
@@ -204,11 +204,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
         download_path = os.path.join(os.getcwd(), base_path)
 
         # Download items dataloop annotation JSONs
-        filters = dl.Filters(
-            field="metadata.system.mimetype",
-            values=["*pcd*", "*image*"],
-            operator=dl.FiltersOperations.IN
-        )
+        filters = dl.Filters(field="metadata.system.mimetype", values="*pcd*", method=dl.FiltersMethod.OR)
+        filters.add(field="metadata.system.mimetype", values="*image*", method=dl.FiltersMethod.OR)
         dataset.download_annotations(local_path=download_path, filters=filters)
 
         # Download required binaries (Calibration Data)
@@ -235,7 +232,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
             buffer = self.parse_lidar_data(calibration_data=calibration_data)
             frames_item = dataset.items.upload(
                 remote_name="frames.json",
-                remote_path=f"/{remote_path}/",
+                remote_path=f"/{remote_path}",
                 local_path=buffer,
                 overwrite=True,
                 item_metadata={
@@ -254,7 +251,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
 
 def test_parse_data():
-    dataset = dl.datasets.get(dataset_id="<dataset-id>")
+    dataset = dl.datasets.get(dataset_id="673615818ab4c9a0b0be683e")
     parser = LidarBaseParser()
     print(parser.run(dataset=dataset))
 
