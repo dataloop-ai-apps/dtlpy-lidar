@@ -53,10 +53,9 @@ class LidarBaseParser(dl.BaseServiceRunner):
             }
             calibration_data["frames"][str(lidar_frame_idx)] = lidar_data
 
-            # Loop over images
             for camera_idx, camera in enumerate(camera_list):
-                camera_json_path = os.path.join(json_path, "cameras", camera)
-                camera_items_path = os.path.join(items_path, "cameras", camera)
+                camera_json_path = os.path.join(json_path, "camera", camera)
+                camera_items_path = os.path.join(items_path, "camera", camera)
 
                 camera_json = os.path.join(camera_json_path, pathlib.Path(lidar_json).name)
                 camera_frame_idx = int(pathlib.Path(camera_json).stem)
@@ -144,7 +143,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     camera_json = json.load(f)
 
                 camera_id = f"{camera_num}_frame_{frame_num}"
-                image_timestamp = camera_details.get("timestamp")
+                camera_timestamp = camera_details.get("timestamp")
                 camera_translation = extrinsic_calibrations.Translation(
                     x=camera_details.get("extrinsics", dict()).get("position").get("x", 0),
                     y=camera_details.get("extrinsics", dict()).get("position").get("y", 0),
@@ -186,7 +185,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     item_id=camera_json.get("id"),
                     lidar_camera=lidar_camera,
                     remote_path=camera_json.get("filename"),
-                    timestamp=image_timestamp
+                    timestamp=camera_timestamp
                 )
                 lidar_frame_images.append(scene_image_item)
 
@@ -202,9 +201,15 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     @staticmethod
     def download_data(dataset: dl.Dataset, base_path):
-        # Download items dataloop annotation JSONs
         download_path = os.path.join(os.getcwd(), base_path)
-        dataset.download_annotations(local_path=download_path)
+
+        # Download items dataloop annotation JSONs
+        filters = dl.Filters(
+            field="metadata.system.mimetype",
+            values=["*pcd*", "*image*"],
+            operator=dl.FiltersOperations.IN
+        )
+        dataset.download_annotations(local_path=download_path, filters=filters)
 
         # Download required binaries (Calibration Data)
         filters = dl.Filters(field="metadata.system.mimetype", values="*json*")
