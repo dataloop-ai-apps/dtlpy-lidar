@@ -16,6 +16,12 @@ class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class
     @staticmethod
     def parse_calibration_data(items_path, json_path) -> dict:
+        """
+        Extract the calibration data from the downloaded JSONs files
+        :param items_path: Path to the items folder
+        :param json_path: Path to the JSON folder
+        :return: calibration_data: dict with the extracted calibration data
+        """
         calibration_data = {"frames": dict()}
         camera_list = [
             'front_camera',
@@ -99,6 +105,11 @@ class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
     def parse_lidar_data(calibration_data: dict):
+        """
+        Convert the calibration data to a LidarScene object
+        :param calibration_data: calibration_data: dict with the extracted calibration data
+        :return: buffer: BytesIO buffer with the LidarScene data to be uploaded to the dataloop platform as JSON
+        """
         scene = lidar_scene.LidarScene()
         frames = calibration_data.get("frames", dict())
         for frame_num, frame_details in frames.items():
@@ -199,6 +210,12 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     @staticmethod
     def download_data(dataset: dl.Dataset, base_path):
+        """
+        Download the required data for the parser
+        :param dataset: Input dataset
+        :param base_path: Folder name to store the downloaded data
+        :return: download_path: Path to the downloaded data
+        """
         download_path = os.path.join(os.getcwd(), base_path)
 
         # Download items dataloop annotation JSONs
@@ -212,8 +229,13 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
         return download_path
 
-
     def run(self, dataset: dl.Dataset, remote_path: str = "/"):
+        """
+        Run the parser
+        :param dataset: Input dataset
+        :param remote_path: Path to the remote folder where the Lidar data is uploaded
+        :return: frames_item: dl.Item entity of the uploaded frames.json
+        """
         if remote_path.startswith("/"):
             remote_path = remote_path[1:]
 
