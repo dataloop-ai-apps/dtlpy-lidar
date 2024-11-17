@@ -15,7 +15,7 @@ logger = logging.Logger(name="lidar_base_parser")
 class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def download_data(dataset: dl.Dataset, remote_path: str, download_path):
+    def download_data(dataset: dl.Dataset, remote_path: str, download_path) -> tuple:
         """
         Download the required data for the parser
         :param dataset: Input dataset
@@ -38,13 +38,162 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def parse_lidar_data(items_path, json_path):
-        pass
+    def parse_lidar_data(items_path, json_path) -> dict:
+        lidar_data = dict()
+
+        lidar_json_path = os.path.join(json_path, "lidar")
+        lidar_items_path = os.path.join(items_path, "lidar")
+
+        # Open the poses and timestamps JSONs
+        poses_json = os.path.join(lidar_items_path, "poses.json")
+        with open(poses_json, 'r') as f:
+            poses_json_data = json.load(f)
+
+        timestamps_json = os.path.join(lidar_items_path, "timestamps.json")
+        with open(timestamps_json, 'r') as f:
+            timestamps_json_data = json.load(f)
+
+        # Get all the lidar JSONs sorted by frame number
+        lidar_jsons = pathlib.Path(lidar_json_path).rglob('*.json')
+        lidar_jsons = sorted(lidar_jsons, key=lambda x: int(x.stem))
+
+        for lidar_frame_idx, lidar_json in enumerate(lidar_jsons):
+            with open(lidar_json, 'r') as f:
+                lidar_json_data = json.load(f)
+
+            # lidar_data = {
+            #     "path": pathlib.Path(lidar_json).absolute(),
+            #     "timestamp": timestamps_json_data[lidar_frame_idx],
+            #     "position": poses_json_data[lidar_frame_idx]["position"],
+            #     "heading": poses_json_data[lidar_frame_idx]["heading"],
+            #     "cameras": dict()
+            # }
+
+            ground_map_id = lidar_json_data.get("metadata", dict()).get("user", dict()).get(
+                "lidar_ground_detection", dict()).get("groundMapId", None)
+            lidar_translation = extrinsic_calibrations.Translation(
+                x=poses_json_data.get(lidar_frame_idx, dict()).get("position", dict()).get("x", 0),
+                y=poses_json_data.get(lidar_frame_idx, dict()).get("position", dict()).get("y", 0),
+                z=poses_json_data.get(lidar_frame_idx, dict()).get("position", dict()).get("z", 0),
+            )
+            lidar_rotation = extrinsic_calibrations.QuaternionRotation(
+                x=poses_json_data.get(lidar_frame_idx, dict()).get("heading", dict()).get("x", 0),
+                y=poses_json_data.get(lidar_frame_idx, dict()).get("heading", dict()).get("y", 0),
+                z=poses_json_data.get(lidar_frame_idx, dict()).get("heading", dict()).get("z", 0),
+                w=poses_json_data.get(lidar_frame_idx, dict()).get("heading", dict()).get("w", 1)
+            )
+            lidar_timestamp = timestamps_json_data.get(lidar_frame_idx, "")
+
+            lidar_pcd_data = images_and_pcds.LidarPcdData(
+                item_id=lidar_json_data.get("id"),
+                ground_id=ground_map_id,
+                remote_path=lidar_json_data.get("filename"),
+                extrinsic=extrinsic_calibrations.Extrinsic(
+                    rotation=lidar_rotation,
+                    translation=lidar_translation
+                ),
+                timestamp=lidar_timestamp
+            )
+            lidar_data[str(lidar_frame_idx)] = lidar_pcd_data
+
+        return lidar_data
 
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def parse_cameras_data(items_path, json_path):
-        pass
+    def parse_cameras_data(items_path, json_path) -> dict:
+        cameras_data = dict()
+
+        camera_json_path = os.path.join(json_path, "camera")
+        camera_items_path = os.path.join(items_path, "camera")
+
+        # camera_list = [
+        #     'front_camera',
+        #     'front_left_camera',
+        #     'left_camera',
+        #     'back_camera',
+        #     'right_camera',
+        #     'front_right_camera'
+        # ]
+
+        camera_folders_list = sorted(os.listdir(json_path))
+        for camera_folder_idx, camera_folder in enumerate(camera_folders_list):
+            cameras_data[camera_folder] = dict()
+
+            camera_folder_json_path = os.path.join(camera_json_path, camera_folder)
+            camera_folder_items_path = os.path.join(camera_items_path, camera_folder)
+
+            # Open the poses, intrinsics and timestamps JSONs
+            intrinsics_json = os.path.join(camera_folder_items_path, "intrinsics.json")
+            with open(intrinsics_json, 'r') as f:
+                intrinsics_json_data = json.load(f)
+
+            poses_json = os.path.join(camera_folder_items_path, "poses.json")
+            with open(poses_json, 'r') as f:
+                poses_json_data = json.load(f)
+
+            timestamps_json = os.path.join(camera_folder_items_path, "timestamps.json")
+            with open(timestamps_json, 'r') as f:
+                timestamps_json_data = json.load(f)
+
+            # Get all the camera JSONs sorted by frame number
+            camera_jsons = pathlib.Path(camera_folder_json_path).rglob('*.json')
+            camera_jsons = sorted(camera_jsons, key=lambda x: int(x.stem))
+
+            for camera_frame_idx, camera_json in enumerate(camera_jsons):
+                with open(camera_json, 'r') as f:
+                    camera_json_data = json.load(f)
+
+                camera_id = f"{camera_folder_idx}_frame_{camera_frame_idx}"
+                camera_intrinsic = camera_calibrations.Intrinsic(
+                    fx=intrinsics_json_data.get("fx", 0),
+                    fy=intrinsics_json_data.get("fy", 0),
+                    cx=intrinsics_json_data.get("cx", 0),
+                    cy=intrinsics_json_data.get("cy", 0)
+                )
+                camera_rotation = extrinsic_calibrations.QuaternionRotation(
+                    x=poses_json_data.get(camera_frame_idx, dict()).get("heading", dict()).get("x", 0),
+                    y=poses_json_data.get(camera_frame_idx, dict()).get("heading", dict()).get("y", 0),
+                    z=poses_json_data.get(camera_frame_idx, dict()).get("heading", dict()).get("z", 0),
+                    w=poses_json_data.get(camera_frame_idx, dict()).get("heading", dict()).get("w", 1)
+                )
+                camera_translation = extrinsic_calibrations.Translation(
+                    x=poses_json_data.get(camera_frame_idx, dict()).get("position", dict()).get("x", 0),
+                    y=poses_json_data.get(camera_frame_idx, dict()).get("position", dict()).get("y", 0),
+                    z=poses_json_data.get(camera_frame_idx, dict()).get("position", dict()).get("z", 0)
+                )
+                camera_distortion = camera_calibrations.Distortion(
+                    k1=0,
+                    k2=0,
+                    k3=0,
+                    p1=0,
+                    p2=0
+                )
+                camera_timestamp = timestamps_json_data.get(camera_frame_idx, "")
+
+                lidar_camera_data = camera_calibrations.LidarCameraData(
+                    intrinsic=camera_intrinsic,
+                    extrinsic=extrinsic_calibrations.Extrinsic(
+                        rotation=camera_rotation,
+                        translation=camera_translation
+                    ),
+                    channel=camera_json_data.get("filename"),
+                    distortion=camera_distortion,
+                    cam_id=camera_id,
+                )
+
+                lidar_image_data = images_and_pcds.LidarImageData(
+                    item_id=camera_json_data.get("id"),
+                    lidar_camera=lidar_camera_data,
+                    remote_path=camera_json_data.get("filename"),
+                    timestamp=camera_timestamp
+                )
+
+                cameras_data[camera_folder][str(camera_frame_idx)] = {
+                    "lidar_camera": lidar_camera_data,
+                    "lidar_image": lidar_image_data
+                }
+
+        return cameras_data
 
     # TODO: Override this method in the derived class if needed
     @staticmethod
