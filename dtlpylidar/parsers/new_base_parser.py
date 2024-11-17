@@ -23,6 +23,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
         :return: calibration_data: dict with the extracted calibration data
         """
         calibration_data = {"frames": dict()}
+        # TODO: change to dynamic
+        # os.listdir(json_path)
         camera_list = [
             'front_camera',
             'front_left_camera',
@@ -39,6 +41,9 @@ class LidarBaseParser(dl.BaseServiceRunner):
         lidar_jsons = pathlib.Path(lidar_json_path).rglob('*.json')
         lidar_jsons = sorted(lidar_jsons, key=lambda x: int(x.stem))
 
+        # TODO: read the JSONs files only one
+        # store the read data in dict (for all PCD, and Per camera folder - READ every JSON once)
+        # Read the ID and filename from the JSONs, instead of passing the path
         for lidar_frame_idx, lidar_json in enumerate(lidar_jsons):
             poses_json = os.path.join(lidar_items_path, "poses.json")
             with open(poses_json, 'r') as f:
@@ -105,6 +110,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
     def parse_lidar_data(calibration_data: dict):
+        # TODO: Modify to no open the Items JSONs
         """
         Convert the calibration data to a LidarScene object
         :param calibration_data: calibration_data: dict with the extracted calibration data
@@ -203,10 +209,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 lidar_frame_images=lidar_frame_images
             )
             scene.add_frame(frame_item)
-        buffer = BytesIO()
-        buffer.write(json.dumps(scene.to_json(), default=lambda x: None).encode())
-        buffer.seek(0)
-        return buffer
+        return scene
 
     @staticmethod
     def download_data(dataset: dl.Dataset, base_path):
@@ -249,7 +252,11 @@ class LidarBaseParser(dl.BaseServiceRunner):
             json_path = os.path.join(download_path, "json", remote_path)
 
             calibration_data = self.parse_calibration_data(items_path=items_path, json_path=json_path)
-            buffer = self.parse_lidar_data(calibration_data=calibration_data)
+            scene_data = self.parse_lidar_data(calibration_data=calibration_data)
+
+            buffer = BytesIO()
+            buffer.write(json.dumps(scene_data.to_json(), default=lambda x: None).encode())
+            buffer.seek(0)
             frames_item = dataset.items.upload(
                 remote_name="frames.json",
                 remote_path=f"/{remote_path}",
