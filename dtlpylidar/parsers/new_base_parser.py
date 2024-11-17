@@ -13,7 +13,44 @@ logger = logging.Logger(name="lidar_base_parser")
 
 
 class LidarBaseParser(dl.BaseServiceRunner):
-    # TODO: Override this method in the derived class
+    # TODO: Override this method in the derived class if needed
+    @staticmethod
+    def download_data(dataset: dl.Dataset, remote_path: str, download_path):
+        """
+        Download the required data for the parser
+        :param dataset: Input dataset
+        :param remote_path: Path to the remote folder where the Lidar data is uploaded
+        :param download_path: Path to the downloaded data
+        :return:
+        """
+        # Download items dataloop annotation JSONs
+        filters = dl.Filters(field="metadata.system.mimetype", values="*pcd*", method=dl.FiltersMethod.OR)
+        filters.add(field="metadata.system.mimetype", values="*image*", method=dl.FiltersMethod.OR)
+        dataset.download_annotations(local_path=download_path, filters=filters)
+
+        # Download required binaries (Calibration Data)
+        filters = dl.Filters(field="metadata.system.mimetype", values="*json*")
+        dataset.items.download(local_path=download_path, filters=filters)
+
+        items_path = os.path.join(download_path, "items", remote_path)
+        json_path = os.path.join(download_path, "json", remote_path)
+        return items_path, json_path
+
+    # TODO: Override this method in the derived class if needed
+    @staticmethod
+    def parse_lidar_data(items_path, json_path):
+        pass
+
+    # TODO: Override this method in the derived class if needed
+    @staticmethod
+    def parse_cameras_data(items_path, json_path):
+        pass
+
+    # TODO: Override this method in the derived class if needed
+    @staticmethod
+    def parse_annotations(items_path, json_path):
+        pass
+
     @staticmethod
     def parse_calibration_data(items_path, json_path) -> dict:
         """
@@ -109,7 +146,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
-    def parse_lidar_data(calibration_data: dict):
+    def build_lidar_scene(calibration_data: dict):
         # TODO: Modify to no open the Items JSONs
         """
         Convert the calibration data to a LidarScene object
@@ -211,26 +248,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
             scene.add_frame(frame_item)
         return scene
 
-    @staticmethod
-    def download_data(dataset: dl.Dataset, base_path):
-        """
-        Download the required data for the parser
-        :param dataset: Input dataset
-        :param base_path: Folder name to store the downloaded data
-        :return: download_path: Path to the downloaded data
-        """
-        download_path = os.path.join(os.getcwd(), base_path)
 
-        # Download items dataloop annotation JSONs
-        filters = dl.Filters(field="metadata.system.mimetype", values="*pcd*", method=dl.FiltersMethod.OR)
-        filters.add(field="metadata.system.mimetype", values="*image*", method=dl.FiltersMethod.OR)
-        dataset.download_annotations(local_path=download_path, filters=filters)
-
-        # Download required binaries (Calibration Data)
-        filters = dl.Filters(field="metadata.system.mimetype", values="*json*")
-        dataset.items.download(local_path=download_path, filters=filters)
-
-        return download_path
 
     def run(self, dataset: dl.Dataset, remote_path: str = "/"):
         """
@@ -246,13 +264,16 @@ class LidarBaseParser(dl.BaseServiceRunner):
             remote_path = remote_path[:-1]
 
         base_path = f"{dataset.name}_{str(uuid.uuid4())}"
+        download_path = os.path.join(os.getcwd(), base_path)
         try:
-            download_path = self.download_data(dataset=dataset, base_path=base_path)
-            items_path = os.path.join(download_path, "items", remote_path)
-            json_path = os.path.join(download_path, "json", remote_path)
+            items_path, json_path = self.download_data(
+                dataset=dataset,
+                remote_path=remote_path,
+                download_path=download_path
+            )
 
             calibration_data = self.parse_calibration_data(items_path=items_path, json_path=json_path)
-            scene_data = self.parse_lidar_data(calibration_data=calibration_data)
+            scene_data = self.build_lidar_scene(calibration_data=calibration_data)
 
             buffer = BytesIO()
             buffer.write(json.dumps(scene_data.to_json(), default=lambda x: None).encode())
