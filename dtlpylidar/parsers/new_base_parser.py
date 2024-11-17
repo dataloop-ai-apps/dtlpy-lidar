@@ -1,9 +1,7 @@
-from matplotlib.image import imread
-
 from dtlpylidar.parser_base import extrinsic_calibrations
 from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
-import os
 import dtlpy as dl
+import os
 import json
 from io import BytesIO
 import uuid
@@ -250,11 +248,11 @@ class LidarBaseParser(dl.BaseServiceRunner):
         return frames_item
 
 
-def test_parse_data():
+def test_parser():
     dataset = dl.datasets.get(dataset_id="673615818ab4c9a0b0be683e")
     parser = LidarBaseParser()
     print(parser.run(dataset=dataset))
 
 
 if __name__ == '__main__':
-    test_parse_data()
+    test_parser()
