@@ -128,3 +128,17 @@ if __name__ == "__main__":
     convert_pkl_to_pcd(input_folder)
 
 ```
+
+# Annotations Format
+
+## Cube3D:
+
+Index(['uuid', 'label', 'yaw', 'stationary', 'camera_used', 'position.x',
+       'position.y', 'position.z', 'dimensions.x', '...or_id', 'attributes.pedestrian_behavior',
+       'attributes.pedestrian_age', 'attributes.rider_status'],
+      dtype='object')
+
+
+## Segmentation3D:
+
+[Index(['class'], dtype='object'), RangeIndex(start=0, stop=169171, step=1)]

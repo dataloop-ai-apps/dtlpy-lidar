@@ -260,13 +260,10 @@ class LidarBaseParser(dl.BaseServiceRunner):
             cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
             scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
 
-            buffer = BytesIO()
-            buffer.write(json.dumps(scene_data, default=lambda x: None).encode())
-            buffer.seek(0)
             frames_item = dataset.items.upload(
                 remote_name="frames.json",
                 remote_path=f"/{remote_path}",
-                local_path=buffer,
+                local_path=json.dumps(scene_data).encode(),
                 overwrite=True,
                 item_metadata={
                     "system": {
