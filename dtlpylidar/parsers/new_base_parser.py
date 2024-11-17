@@ -197,8 +197,14 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def parse_annotations(items_path, json_path):
-        pass
+    def parse_annotations(frames_item: dl.Item, items_path, json_path):
+        annotations_json_path = os.path.join(json_path, "annotations")
+        annotations_items_path = os.path.join(items_path, "annotations")
+
+        builder = frames_item.annotations.builder()
+
+        cuboid_items_path = os.path.join(annotations_items_path, "cuboid")
+        semseg_items_path = os.path.join(annotations_items_path, "semseg")
 
     # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
