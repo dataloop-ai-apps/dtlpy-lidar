@@ -28,8 +28,12 @@ class LidarBaseParser(dl.BaseServiceRunner):
         filters.add(field="metadata.system.mimetype", values="*image*", method=dl.FiltersMethod.OR)
         dataset.download_annotations(local_path=download_path, filters=filters)
 
-        # Download required binaries (Calibrations and Annotations Data)
-        filters = dl.Filters(field="metadata.system.mimetype", values=["*json*", "*csv*"])
+        # Download required binaries (Calibrations Data)
+        filters = dl.Filters(field="metadata.system.mimetype", values="*json*")
+        dataset.items.download(local_path=download_path, filters=filters)
+
+        # Download required binaries (Annotations Data)
+        filters = dl.Filters(field="metadata.system.mimetype", values="*csv*")
         dataset.items.download(local_path=download_path, filters=filters)
 
         items_path = os.path.join(download_path, "items", remote_path)
@@ -204,7 +208,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
         builder = frames_item.annotations.builder()
 
         # Parse the cuboid annotations
-        cuboid_items_path = os.path.join(annotations_items_path, "cuboid")
+        cuboid_items_path = os.path.join(annotations_items_path, "cuboids")
         cuboid_csvs = pathlib.Path(cuboid_items_path).rglob('*.csv')
         cuboid_csvs = sorted(cuboid_csvs, key=lambda x: int(x.stem))
 
@@ -214,10 +218,10 @@ class LidarBaseParser(dl.BaseServiceRunner):
             cuboid_csv_data = pd.read_csv(filepath_or_buffer=cuboid_csv)
 
             for _, row in cuboid_csv_data.iterrows():
-                object_id = uid_to_object_id_map.get(row["uid"], None)
+                object_id = uid_to_object_id_map.get(row["uuid"], None)
                 if object_id is None:
                     object_id = next_object_id
-                    uid_to_object_id_map[row["uid"]] = object_id
+                    uid_to_object_id_map[row["uuid"]] = object_id
                     next_object_id += 1
 
                 annotation_definition = dl.Cube3d(
@@ -229,10 +233,11 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 builder.add(
                     annotation_definition=annotation_definition,
                     object_id=object_id,
-                    frame_number=csv_frame_idx
+                    frame_num=csv_frame_idx
                 )
 
         semseg_items_path = os.path.join(annotations_items_path, "semseg")
+        builder.upload()
 
     # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
@@ -290,24 +295,25 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 download_path=download_path
             )
 
-            lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
-            cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
-            scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
+            # lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
+            # cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
+            # scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
 
-            frames_item = dataset.items.upload(
-                remote_name="frames.json",
-                remote_path=f"/{remote_path}",
-                local_path=json.dumps(scene_data).encode(),
-                overwrite=True,
-                item_metadata={
-                    "system": {
-                        "shebang": {
-                            "dltype": "PCDFrames"
-                        }
-                    },
-                    "fps": 1
-                }
-            )
+            # frames_item = dataset.items.upload(
+            #     remote_name="frames.json",
+            #     remote_path=f"/{remote_path}",
+            #     local_path=json.dumps(scene_data).encode(),
+            #     overwrite=True,
+            #     item_metadata={
+            #         "system": {
+            #             "shebang": {
+            #                 "dltype": "PCDFrames"
+            #             }
+            #         },
+            #         "fps": 1
+            #     }
+            # )
+            frames_item = dl.items.get(item_id="673a1c4d94a8e6395e093ef0")
             self.parse_annotations(frames_item=frames_item, items_path=items_path, json_path=json_path)
         finally:
             shutil.rmtree(path=base_path, ignore_errors=True)
