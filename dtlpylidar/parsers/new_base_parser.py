@@ -1,9 +1,9 @@
 from dtlpylidar.parser_base import extrinsic_calibrations
 from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
 import dtlpy as dl
+import pandas as pd
 import os
 import json
-from io import BytesIO
 import uuid
 import logging
 import shutil
@@ -28,8 +28,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
         filters.add(field="metadata.system.mimetype", values="*image*", method=dl.FiltersMethod.OR)
         dataset.download_annotations(local_path=download_path, filters=filters)
 
-        # Download required binaries (Calibration Data)
-        filters = dl.Filters(field="metadata.system.mimetype", values="*json*")
+        # Download required binaries (Calibrations and Annotations Data)
+        filters = dl.Filters(field="metadata.system.mimetype", values=["*json*", "*csv*"])
         dataset.items.download(local_path=download_path, filters=filters)
 
         items_path = os.path.join(download_path, "items", remote_path)
@@ -143,7 +143,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 with open(camera_json, 'r') as f:
                     camera_json_data = json.load(f)
 
-                camera_id = f"{camera_folder_idx}_frame_{camera_frame_idx}"
+                camera_id = f"{camera_folder}_frame_{camera_frame_idx}"
                 camera_intrinsic = camera_calibrations.Intrinsic(
                     fx=intrinsics_json_data.get("fx", 0),
                     fy=intrinsics_json_data.get("fy", 0),
@@ -203,7 +203,35 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
         builder = frames_item.annotations.builder()
 
+        # Parse the cuboid annotations
         cuboid_items_path = os.path.join(annotations_items_path, "cuboid")
+        cuboid_csvs = pathlib.Path(cuboid_items_path).rglob('*.csv')
+        cuboid_csvs = sorted(cuboid_csvs, key=lambda x: int(x.stem))
+
+        next_object_id = 0
+        uid_to_object_id_map = dict()
+        for csv_frame_idx, cuboid_csv in enumerate(cuboid_csvs):
+            cuboid_csv_data = pd.read_csv(filepath_or_buffer=cuboid_csv)
+
+            for _, row in cuboid_csv_data.iterrows():
+                object_id = uid_to_object_id_map.get(row["uid"], None)
+                if object_id is None:
+                    object_id = next_object_id
+                    uid_to_object_id_map[row["uid"]] = object_id
+                    next_object_id += 1
+
+                annotation_definition = dl.Cube3d(
+                    label=row["label"],
+                    position=(row["position.x"], row["position.y"], row["position.z"]),
+                    scale=(row["dimensions.x"], row["dimensions.y"], row["dimensions.z"]),
+                    rotation=(0, 0, row["yaw"]),
+                )
+                builder.add(
+                    annotation_definition=annotation_definition,
+                    object_id=object_id,
+                    frame_number=csv_frame_idx
+                )
+
         semseg_items_path = os.path.join(annotations_items_path, "semseg")
 
     # TODO: Add to docs to first convert the PLY to PCD
@@ -280,6 +308,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     "fps": 1
                 }
             )
+            self.parse_annotations(frames_item=frames_item, items_path=items_path, json_path=json_path)
         finally:
             shutil.rmtree(path=base_path, ignore_errors=True)
 
