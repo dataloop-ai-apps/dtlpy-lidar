@@ -203,7 +203,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
         return cameras_data
 
-    def _calculate_cube_corners(self, center, dimensions):
+    @staticmethod
+    def _calculate_cube_corners(center, dimensions):
         half_dimensions = np.array(dimensions) / 2
         corner_offsets = [
             [-1, -1, -1], [+1, -1, -1], [-1, +1, -1], [+1, +1, -1],
@@ -224,10 +225,10 @@ class LidarBaseParser(dl.BaseServiceRunner):
         new_box_translation = cloud.get_center() - transformation_matrix[3, :3]
         return new_box_translation, new_box_rotation
 
-    def _calculate_cube_transform(self, row, frame_pcd_translation, frame_pcd_rotation):
-        ann_position = np.array([row["position.x"], row["position.y"], row["position.z"]])
-        ann_rotation = np.array([0, 0, row["yaw"]])
-        ann_scale = np.array([row["dimensions.x"], row["dimensions.y"], row["dimensions.z"]])
+    def _calculate_cube_transform(self, row_data, frame_pcd_translation, frame_pcd_rotation):
+        ann_position = np.array([row_data["position.x"], row_data["position.y"], row_data["position.z"]])
+        ann_rotation = np.array([0, 0, row_data["yaw"]])
+        ann_scale = np.array([row_data["dimensions.x"], row_data["dimensions.y"], row_data["dimensions.z"]])
         bbox_corners = self._calculate_cube_corners(center=ann_position, dimensions=ann_scale)
 
         transformation_matrix = transformations.calc_transform_matrix(
@@ -247,17 +248,19 @@ class LidarBaseParser(dl.BaseServiceRunner):
         annotations_items_path = os.path.join(items_path, "annotations")
 
         builder = frames_item.annotations.builder()
-
-        # Parse the cuboid annotations
-        cuboid_items_path = os.path.join(annotations_items_path, "cuboids")
-        cuboid_csvs = pathlib.Path(cuboid_items_path).rglob('*.csv')
-        cuboid_csvs = sorted(cuboid_csvs, key=lambda x: int(x.stem))
-
         frames_json_data = json.loads(s=frames_item.download(save_locally=False).getvalue())
 
         next_object_id = 0
         uid_to_object_id_map = dict()
-        for csv_frame_idx, cuboid_csv in enumerate(cuboid_csvs):
+
+        ################################
+        # Parse the cuboid annotations #
+        ################################
+        cuboids_items_path = os.path.join(annotations_items_path, "cuboids")
+        cuboids_csvs = pathlib.Path(cuboids_items_path).rglob('*.csv')
+        cuboids_csvs = sorted(cuboids_csvs, key=lambda x: int(x.stem))
+
+        for csv_frame_idx, cuboids_csv in enumerate(cuboids_csvs):
             frame_pcd_translation = frames_json_data["frames"][csv_frame_idx]["translation"]
             frame_pcd_translation = np.array(
                 [frame_pcd_translation["x"], frame_pcd_translation["y"], frame_pcd_translation["z"]]
@@ -267,19 +270,18 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 [frame_pcd_rotation["x"], frame_pcd_rotation["y"], frame_pcd_rotation["z"], frame_pcd_rotation["w"]]
             )
 
-            cuboid_csv_data = pd.read_csv(filepath_or_buffer=cuboid_csv)
-
-            for _, row in cuboid_csv_data.iterrows():
-                object_id = uid_to_object_id_map.get(row["uuid"], None)
+            cuboids_csv_data = pd.read_csv(filepath_or_buffer=cuboids_csv)
+            for _, row_data in cuboids_csv_data.iterrows():
+                object_id = uid_to_object_id_map.get(row_data["uuid"], None)
                 if object_id is None:
                     object_id = next_object_id
-                    uid_to_object_id_map[row["uuid"]] = object_id
+                    uid_to_object_id_map[row_data["uuid"]] = object_id
                     next_object_id += 1
 
-                ann_label = row["label"]
-                ann_scale = np.array([row["dimensions.x"], row["dimensions.y"], row["dimensions.z"]])
+                ann_label = row_data["label"]
+                ann_scale = np.array([row_data["dimensions.x"], row_data["dimensions.y"], row_data["dimensions.z"]])
                 ann_position, ann_rotation = self._calculate_cube_transform(
-                    row=row,
+                    row_data=row_data,
                     frame_pcd_translation=frame_pcd_translation,
                     frame_pcd_rotation=frame_pcd_rotation
                 )
@@ -296,7 +298,18 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     frame_num=csv_frame_idx
                 )
 
+        ################################
+        # Parse the semseg annotations #
+        ################################
+
         semseg_items_path = os.path.join(annotations_items_path, "semseg")
+        semseg_csvs = pathlib.Path(semseg_items_path).rglob('*.csv')
+        semseg_csvs = sorted(semseg_csvs, key=lambda x: int(x.stem))
+
+        for csv_frame_idx, semseg_csv in enumerate(semseg_csvs):
+            # TODO: find class to label mapping
+            pass
+
         builder.upload()
 
     # TODO: Add to docs to first convert the PLY to PCD
