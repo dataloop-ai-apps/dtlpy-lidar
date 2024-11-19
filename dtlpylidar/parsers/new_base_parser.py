@@ -1,7 +1,11 @@
 from dtlpylidar.parser_base import extrinsic_calibrations
 from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
+import dtlpylidar.utilities.transformations as transformations
 import dtlpy as dl
 import pandas as pd
+import numpy as np
+import open3d as o3d
+from scipy.spatial.transform import Rotation as R
 import os
 import json
 import uuid
@@ -199,9 +203,46 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
         return cameras_data
 
-    # TODO: Override this method in the derived class if needed
+    def _calculate_cube_corners(self, center, dimensions):
+        half_dimensions = np.array(dimensions) / 2
+        corner_offsets = [
+            [-1, -1, -1], [+1, -1, -1], [-1, +1, -1], [+1, +1, -1],
+            [-1, -1, +1], [+1, -1, +1], [-1, +1, +1], [+1, +1, +1]
+        ]
+        corner_offsets = np.array(corner_offsets)
+        corners = center + corner_offsets * half_dimensions
+        return corners
+
     @staticmethod
-    def parse_annotations(frames_item: dl.Item, items_path, json_path):
+    def _fix_box_directions(corners, transformation_matrix, yaw):
+        v3d = o3d.utility.Vector3dVector(corners)
+        cloud = o3d.geometry.PointCloud(v3d)
+        cloud.transform(transformation_matrix)
+        box_rotation = R.from_euler('xyz', [0, 0, float(yaw)]).as_matrix()
+        new_box_rotation = list(
+            R.from_matrix(np.dot(transformation_matrix[:3, :3], box_rotation)).as_euler('xyz'))
+        new_box_translation = cloud.get_center() - transformation_matrix[3, :3]
+        return new_box_translation, new_box_rotation
+
+    def _calculate_cube_transform(self, row, frame_pcd_translation, frame_pcd_rotation):
+        ann_position = np.array([row["position.x"], row["position.y"], row["position.z"]])
+        ann_rotation = np.array([0, 0, row["yaw"]])
+        ann_scale = np.array([row["dimensions.x"], row["dimensions.y"], row["dimensions.z"]])
+        bbox_corners = self._calculate_cube_corners(center=ann_position, dimensions=ann_scale)
+
+        transformation_matrix = transformations.calc_transform_matrix(
+            rotation=R.from_quat(frame_pcd_rotation).as_matrix(),
+            position=np.array(frame_pcd_translation)
+        )
+        new_ann_translation, new_ann_rotation = self._fix_box_directions(
+            corners=bbox_corners,
+            transformation_matrix=transformation_matrix,
+            yaw=ann_rotation[-1],
+        )
+        return new_ann_translation, new_ann_rotation
+
+    # TODO: Override this method in the derived class if needed
+    def parse_annotations(self, frames_item: dl.Item, items_path, json_path):
         annotations_json_path = os.path.join(json_path, "annotations")
         annotations_items_path = os.path.join(items_path, "annotations")
 
@@ -212,9 +253,20 @@ class LidarBaseParser(dl.BaseServiceRunner):
         cuboid_csvs = pathlib.Path(cuboid_items_path).rglob('*.csv')
         cuboid_csvs = sorted(cuboid_csvs, key=lambda x: int(x.stem))
 
+        frames_json_data = json.loads(s=frames_item.download(save_locally=False).getvalue())
+
         next_object_id = 0
         uid_to_object_id_map = dict()
         for csv_frame_idx, cuboid_csv in enumerate(cuboid_csvs):
+            frame_pcd_translation = frames_json_data["frames"][csv_frame_idx]["translation"]
+            frame_pcd_translation = np.array(
+                [frame_pcd_translation["x"], frame_pcd_translation["y"], frame_pcd_translation["z"]]
+            )
+            frame_pcd_rotation = frames_json_data["frames"][csv_frame_idx]["rotation"]
+            frame_pcd_rotation = np.array(
+                [frame_pcd_rotation["x"], frame_pcd_rotation["y"], frame_pcd_rotation["z"], frame_pcd_rotation["w"]]
+            )
+
             cuboid_csv_data = pd.read_csv(filepath_or_buffer=cuboid_csv)
 
             for _, row in cuboid_csv_data.iterrows():
@@ -224,11 +276,19 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     uid_to_object_id_map[row["uuid"]] = object_id
                     next_object_id += 1
 
+                ann_label = row["label"]
+                ann_scale = np.array([row["dimensions.x"], row["dimensions.y"], row["dimensions.z"]])
+                ann_position, ann_rotation = self._calculate_cube_transform(
+                    row=row,
+                    frame_pcd_translation=frame_pcd_translation,
+                    frame_pcd_rotation=frame_pcd_rotation
+                )
+
                 annotation_definition = dl.Cube3d(
-                    label=row["label"],
-                    position=(row["position.x"], row["position.y"], row["position.z"]),
-                    scale=(row["dimensions.x"], row["dimensions.y"], row["dimensions.z"]),
-                    rotation=(0, 0, row["yaw"]),
+                    label=ann_label,
+                    position=ann_position,
+                    scale=ann_scale,
+                    rotation=ann_rotation
                 )
                 builder.add(
                     annotation_definition=annotation_definition,
