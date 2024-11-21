@@ -215,8 +215,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 [frame_pcd_rotation["x"], frame_pcd_rotation["y"], frame_pcd_rotation["z"], frame_pcd_rotation["w"]]
             )
             # TODO: fix rotation
-            frame_pcd_rotation = transformations.euler_from_quaternion(*frame_pcd_rotation)
-            frame_pcd_rotation = transformations.quaternion_from_euler(*[0, 0, frame_pcd_rotation.tolist()[-1]])
+            # frame_pcd_rotation = transformations.euler_from_quaternion(*frame_pcd_rotation)
+            # frame_pcd_rotation = transformations.quaternion_from_euler(*[0, 0, frame_pcd_rotation.tolist()[-1]])
 
             cuboids_csv_data = pd.read_csv(filepath_or_buffer=cuboids_csv)
             for _, row_data in cuboids_csv_data.iterrows():
@@ -259,6 +259,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 labels.add(ann_label)
 
         builder.upload()
+        frames_item.dataset.update_labels(label_list=list(labels), upsert=True)
+        return frames_item
 
     # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
@@ -285,11 +287,11 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 scene.add_camera(frame_lidar_camera_data)
                 lidar_frame_images.append(frame_lidar_image_data)
 
-            frame_item = lidar_frame.LidarSceneFrame(
+            lidar_scene_frame = lidar_frame.LidarSceneFrame(
                 lidar_frame_pcd=frame_lidar_pcd_data,
                 lidar_frame_images=lidar_frame_images
             )
-            scene.add_frame(frame_item)
+            scene.add_frame(lidar_scene_frame)
 
         scene_data = scene.to_json()
         return scene_data
@@ -317,24 +319,25 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 download_path=download_path
             )
 
-            lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
-            cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
-            scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
-
-            frames_item = dataset.items.upload(
-                remote_name="frames.json",
-                remote_path=f"/{remote_path}",
-                local_path=json.dumps(scene_data).encode(),
-                overwrite=True,
-                item_metadata={
-                    "system": {
-                        "shebang": {
-                            "dltype": "PCDFrames"
-                        }
-                    },
-                    "fps": 1
-                }
-            )
+            # lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
+            # cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
+            # scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
+            #
+            # frames_item = dataset.items.upload(
+            #     remote_name="frames.json",
+            #     remote_path=f"/{remote_path}",
+            #     local_path=json.dumps(scene_data).encode(),
+            #     overwrite=True,
+            #     item_metadata={
+            #         "system": {
+            #             "shebang": {
+            #                 "dltype": "PCDFrames"
+            #             }
+            #         },
+            #         "fps": 1
+            #     }
+            # )
+            frames_item = dl.items.get(item_id="673a1c4d94a8e6395e093ef0")
             self.parse_annotations(frames_item=frames_item, items_path=items_path, json_path=json_path)
         finally:
             shutil.rmtree(path=base_path, ignore_errors=True)

@@ -160,40 +160,60 @@ def calc_transform_matrix(rotation=np.identity(n=3), position=np.array([0.0, 0.0
 
 
 def calc_cuboid_corners(center=np.zeros(3), dimensions=np.ones(3)):
+    """
+    Calculates the 3D coordinates of all eight corners of a cube given its center and dimensions.
+
+    Args:
+        center: A list or numpy array of size 3 representing the center point (x, y, z).
+        dimensions: A list or numpy array of size 3 representing the dimensions (x, y, z) of the cube.
+
+    Returns:
+        A numpy array of size (8, 3) containing the coordinates of all eight corners.
+    """
+
+    # Half dimensions for easier calculations
     half_dimensions = np.array(dimensions) / 2
+
+    # Create a list of corner offsets relative to the center
     corner_offsets = [
         [-1, -1, -1], [+1, -1, -1], [-1, +1, -1], [+1, +1, -1],
         [-1, -1, +1], [+1, -1, +1], [-1, +1, +1], [+1, +1, +1]
     ]
+
+    # Convert corner offsets to numpy array
     corner_offsets = np.array(corner_offsets)
+
+    # Calculate corner positions by adding offsets to center and multiplying by half dimensions
     cuboid_corners = center + corner_offsets * half_dimensions
     return cuboid_corners
 
 
-def fix_cuboid_directions(cuboid_corners: np.ndarray, transformation_matrix=np.identity(4), euler_rotation=np.zeros(3)):
+def fix_cuboid_directions(cuboid_corners: np.ndarray, cuboid_rotation_matrix=np.identity(3),
+                          scene_position=np.zeros(3), scene_rotation_matrix=np.identity(3)):
+    scene_transformation_matrix = calc_transform_matrix(
+        rotation=scene_rotation_matrix,
+        position=scene_position
+    )
     v3d = o3d.utility.Vector3dVector(cuboid_corners)
     cloud = o3d.geometry.PointCloud(v3d)
-    cloud.transform(transformation_matrix)
-    cuboid_rotation = R.from_euler('xyz', euler_rotation).as_matrix()
-    new_cuboid_rotation = np.dot(transformation_matrix[:3, :3], cuboid_rotation)
-    new_cuboid_position = cloud.get_center() - transformation_matrix[3, :3]
+    cloud.transform(scene_transformation_matrix)
+    new_cuboid_rotation = np.dot(scene_rotation_matrix, cuboid_rotation_matrix)
+    new_cuboid_position = cloud.get_center() - scene_position
     return new_cuboid_position, new_cuboid_rotation
 
 
 def calc_cuboid_scene_transform_matrix(cuboid_position=np.zeros(3), cuboid_quaternion=np.asarray([0.0, 0.0, 0.0, 1.0]),
                                        cuboid_scale=np.ones(3),
                                        scene_position=np.zeros(3), scene_quaternion=np.asarray([0.0, 0.0, 0.0, 1.0])):
-    euler_rotation = euler_from_quaternion(*cuboid_quaternion)
+    cuboid_rotation_matrix = rotation_matrix_from_quaternion(*cuboid_quaternion)
     cuboid_corners = calc_cuboid_corners(center=cuboid_position, dimensions=cuboid_scale)
+    scene_rotation_matrix = rotation_matrix_from_quaternion(*scene_quaternion)
 
-    transformation_matrix = calc_transform_matrix(
-        rotation=R.from_quat(scene_quaternion).as_matrix(),
-        position=scene_position
-    )
     new_cuboid_position, new_cuboid_rotation = fix_cuboid_directions(
         cuboid_corners=cuboid_corners,
-        transformation_matrix=transformation_matrix,
-        euler_rotation=euler_rotation,
+        cuboid_rotation_matrix=cuboid_rotation_matrix,
+        scene_position=scene_position,
+        scene_rotation_matrix=scene_rotation_matrix,
     )
     new_cuboid_transform_matrix = calc_transform_matrix(rotation=new_cuboid_rotation, position=new_cuboid_position)
     return new_cuboid_transform_matrix
