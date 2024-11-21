@@ -166,18 +166,18 @@ def calc_cuboid_corners(center=np.zeros(3), dimensions=np.ones(3)):
         [-1, -1, +1], [+1, -1, +1], [-1, +1, +1], [+1, +1, +1]
     ]
     corner_offsets = np.array(corner_offsets)
-    corners = center + corner_offsets * half_dimensions
-    return corners
+    cuboid_corners = center + corner_offsets * half_dimensions
+    return cuboid_corners
 
 
-def fix_cuboid_directions(corners: np.ndarray, transformation_matrix=np.identity(4), euler_rotation=np.zeros(3)):
-    v3d = o3d.utility.Vector3dVector(corners)
+def fix_cuboid_directions(cuboid_corners: np.ndarray, transformation_matrix=np.identity(4), euler_rotation=np.zeros(3)):
+    v3d = o3d.utility.Vector3dVector(cuboid_corners)
     cloud = o3d.geometry.PointCloud(v3d)
     cloud.transform(transformation_matrix)
     cuboid_rotation = R.from_euler('xyz', euler_rotation).as_matrix()
-    new_cuboid_rotation = list(R.from_matrix(np.dot(transformation_matrix[:3, :3], cuboid_rotation)).as_euler('xyz'))
-    new_cuboid_translation = cloud.get_center() - transformation_matrix[3, :3]
-    return new_cuboid_translation, new_cuboid_rotation
+    new_cuboid_rotation = np.dot(transformation_matrix[:3, :3], cuboid_rotation)
+    new_cuboid_position = cloud.get_center() - transformation_matrix[3, :3]
+    return new_cuboid_position, new_cuboid_rotation
 
 
 def calc_cuboid_scene_transform_matrix(cuboid_position=np.zeros(3), cuboid_quaternion=np.asarray([0.0, 0.0, 0.0, 1.0]),
@@ -190,12 +190,13 @@ def calc_cuboid_scene_transform_matrix(cuboid_position=np.zeros(3), cuboid_quate
         rotation=R.from_quat(scene_quaternion).as_matrix(),
         position=scene_position
     )
-    new_cuboid_translation, new_cuboid_rotation = fix_cuboid_directions(
-        corners=cuboid_corners,
+    new_cuboid_position, new_cuboid_rotation = fix_cuboid_directions(
+        cuboid_corners=cuboid_corners,
         transformation_matrix=transformation_matrix,
         euler_rotation=euler_rotation,
     )
-    return new_cuboid_translation, new_cuboid_rotation
+    new_cuboid_transform_matrix = calc_transform_matrix(rotation=new_cuboid_rotation, position=new_cuboid_position)
+    return new_cuboid_transform_matrix
 
 
 def translate_point_cloud(points, translation: Translation):
