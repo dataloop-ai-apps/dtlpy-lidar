@@ -26,15 +26,18 @@ class LidarBaseParser(dl.BaseServiceRunner):
         :return: (items_path, json_path) Paths to the downloaded items and annotations JSON files directories
         """
         # Download items dataloop annotation JSONs
+        # (PCD and Image annotation JSONs contains the Dataloop platform references (Like: ID) to the remote files)
         filters = dl.Filters(field="metadata.system.mimetype", values="*pcd*", method=dl.FiltersMethod.OR)
         filters.add(field="metadata.system.mimetype", values="*image*", method=dl.FiltersMethod.OR)
         dataset.download_annotations(local_path=download_path, filters=filters)
 
         # Download required binaries (Calibrations Data)
+        # Pandaset Calibration Data is saved in JSON files (Like: poses.json, intrinsics.json, timestamps.json)
         filters = dl.Filters(field="metadata.system.mimetype", values="*json*")
         dataset.items.download(local_path=download_path, filters=filters)
 
         # Download required binaries (Annotations Data)
+        # Pandaset Annotations Data is saved in CSV files (Like: 01.csv in cuboids folder)
         filters = dl.Filters(field="metadata.system.mimetype", values="*csv*")
         dataset.items.download(local_path=download_path, filters=filters)
 
@@ -51,17 +54,17 @@ class LidarBaseParser(dl.BaseServiceRunner):
         :param json_path: Paths to the downloaded annotations JSON files directory
         :return: lidar_data: Dictionary containing mapping of frame number to LidarPcdData object
         """
-        # TODO add docstring + explain how Pandaset ino is saved and gathered
         lidar_data = dict()
 
         lidar_json_path = os.path.join(json_path, "lidar")
         lidar_items_path = os.path.join(items_path, "lidar")
 
-        # Open the poses and timestamps JSONs
+        # Opening the poses.json file to get the Extrinsic (Translation and Rotation) of the Lidar Scene per frame
         poses_json = os.path.join(lidar_items_path, "poses.json")
         with open(poses_json, 'r') as f:
             poses_json_data: list = json.load(f)
 
+        # Opening the poses.json file to get the Timestamps of the Lidar Scene per frame
         timestamps_json = os.path.join(lidar_items_path, "timestamps.json")
         with open(timestamps_json, 'r') as f:
             timestamps_json_data: list = json.load(f)
@@ -118,6 +121,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
         camera_json_path = os.path.join(json_path, "camera")
         camera_items_path = os.path.join(items_path, "camera")
 
+        # Get the list of all the available camera folders, and building the cameras data objects per camera per frame
         camera_folders_list = sorted(os.listdir(camera_json_path))
         for camera_folder_idx, camera_folder in enumerate(camera_folders_list):
             cameras_data[camera_folder] = dict()
@@ -125,15 +129,17 @@ class LidarBaseParser(dl.BaseServiceRunner):
             camera_folder_json_path = os.path.join(camera_json_path, camera_folder)
             camera_folder_items_path = os.path.join(camera_items_path, camera_folder)
 
-            # Open the poses, intrinsics and timestamps JSONs
+            # Opening the intrinsics.json file to get the Intrinsics (fx, fy, cx, cy) of the Current Camera per frame
             intrinsics_json = os.path.join(camera_folder_items_path, "intrinsics.json")
             with open(intrinsics_json, 'r') as f:
                 intrinsics_json_data: dict = json.load(f)
 
+            # Opening the poses.json file to get the Extrinsic (Translation and Rotation) of the Current Camera per frame
             poses_json = os.path.join(camera_folder_items_path, "poses.json")
             with open(poses_json, 'r') as f:
                 poses_json_data: list = json.load(f)
 
+            # Opening the poses.json file to get the Timestamps of the Current Camera per frame
             timestamps_json = os.path.join(camera_folder_items_path, "timestamps.json")
             with open(timestamps_json, 'r') as f:
                 timestamps_json_data: list = json.load(f)
@@ -217,14 +223,13 @@ class LidarBaseParser(dl.BaseServiceRunner):
         uid_to_object_id_map = dict()
         labels = set()
 
-        ################################
-        # Parse the cuboid annotations #
-        ################################
+        # Parse the cuboid annotations and add them to the annotations builder
         cuboids_items_path = os.path.join(annotations_items_path, "cuboids")
         cuboids_csvs = pathlib.Path(cuboids_items_path).rglob('*.csv')
         cuboids_csvs = sorted(cuboids_csvs, key=lambda x: int(x.stem))
 
         for csv_frame_idx, cuboids_csv in enumerate(cuboids_csvs):
+            # Getting the Lidar Scene Frame Translation and Rotation
             frame_pcd_translation = frames_json_data["frames"][csv_frame_idx]["translation"]
             frame_pcd_translation = np.array(
                 [frame_pcd_translation["x"], frame_pcd_translation["y"], frame_pcd_translation["z"]]
@@ -234,6 +239,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 [frame_pcd_rotation["x"], frame_pcd_rotation["y"], frame_pcd_rotation["z"], frame_pcd_rotation["w"]]
             )
 
+            # Opening the current Scene Frame, cuboid annotations CSV file to get the cuboids annotation data
             cuboids_csv_data = pd.read_csv(filepath_or_buffer=cuboids_csv)
             for _, row_data in cuboids_csv_data.iterrows():
                 object_id = uid_to_object_id_map.get(row_data["uuid"], None)
@@ -246,6 +252,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 ann_position = np.array([row_data["position.x"], row_data["position.y"], row_data["position.z"]])
                 ann_quaternion = transformations.quaternion_from_euler(*[0, 0, row_data["yaw"]])
                 ann_scale = np.array([row_data["dimensions.x"], row_data["dimensions.y"], row_data["dimensions.z"]])
+
+                # Calculate the transform matrix of the cuboid annotation relatively to the Scene Frame
                 ann_transform_matrix = transformations.calc_cuboid_scene_transform_matrix(
                     cuboid_position=ann_position,
                     cuboid_quaternion=ann_quaternion,
@@ -254,6 +262,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     scene_quaternion=frame_pcd_rotation
                 )
 
+                # Extract the cuboid Translation and Rotation from the transform matrix
                 ann_position = transformations.translation_vector_from_transform_matrix(
                     transform_matrix=ann_transform_matrix
                 )
@@ -261,6 +270,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     transform_matrix=ann_transform_matrix
                 )
                 ann_rotation = transformations.euler_from_rotation_matrix(rotation_matrix=ann_rotation_matrix)
+
+                # Add the cuboid annotation to the annotations builder
                 annotation_definition = dl.Cube3d(
                     label=ann_label,
                     position=ann_position,
