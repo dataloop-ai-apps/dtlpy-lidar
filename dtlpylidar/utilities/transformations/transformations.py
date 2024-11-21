@@ -159,6 +159,45 @@ def calc_transform_matrix(rotation=np.identity(n=3), position=np.array([0.0, 0.0
     return transform_matrix
 
 
+def calc_cuboid_corners(center=np.zeros(3), dimensions=np.ones(3)):
+    half_dimensions = np.array(dimensions) / 2
+    corner_offsets = [
+        [-1, -1, -1], [+1, -1, -1], [-1, +1, -1], [+1, +1, -1],
+        [-1, -1, +1], [+1, -1, +1], [-1, +1, +1], [+1, +1, +1]
+    ]
+    corner_offsets = np.array(corner_offsets)
+    corners = center + corner_offsets * half_dimensions
+    return corners
+
+
+def fix_cuboid_directions(corners: np.ndarray, transformation_matrix=np.identity(4), euler_rotation=np.zeros(3)):
+    v3d = o3d.utility.Vector3dVector(corners)
+    cloud = o3d.geometry.PointCloud(v3d)
+    cloud.transform(transformation_matrix)
+    cuboid_rotation = R.from_euler('xyz', euler_rotation).as_matrix()
+    new_cuboid_rotation = list(R.from_matrix(np.dot(transformation_matrix[:3, :3], cuboid_rotation)).as_euler('xyz'))
+    new_cuboid_translation = cloud.get_center() - transformation_matrix[3, :3]
+    return new_cuboid_translation, new_cuboid_rotation
+
+
+def calc_cuboid_scene_transform_matrix(cuboid_position=np.zeros(3), cuboid_quaternion=np.asarray([0.0, 0.0, 0.0, 1.0]),
+                                       cuboid_scale=np.ones(3),
+                                       scene_position=np.zeros(3), scene_quaternion=np.asarray([0.0, 0.0, 0.0, 1.0])):
+    euler_rotation = euler_from_quaternion(*cuboid_quaternion)
+    cuboid_corners = calc_cuboid_corners(center=cuboid_position, dimensions=cuboid_scale)
+
+    transformation_matrix = calc_transform_matrix(
+        rotation=R.from_quat(scene_quaternion).as_matrix(),
+        position=scene_position
+    )
+    new_cuboid_translation, new_cuboid_rotation = fix_cuboid_directions(
+        corners=cuboid_corners,
+        transformation_matrix=transformation_matrix,
+        euler_rotation=euler_rotation,
+    )
+    return new_cuboid_translation, new_cuboid_rotation
+
+
 def translate_point_cloud(points, translation: Translation):
     """
     Translate point cloud by x,y,z position
