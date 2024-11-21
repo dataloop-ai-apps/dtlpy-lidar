@@ -23,7 +23,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
         :param dataset: Input dataset
         :param remote_path: Path to the remote folder where the Lidar data is uploaded
         :param download_path: Path to the downloaded data
-        :return:
+        :return: (items_path, json_path) Paths to the downloaded items and annotations JSON files directories
         """
         # Download items dataloop annotation JSONs
         filters = dl.Filters(field="metadata.system.mimetype", values="*pcd*", method=dl.FiltersMethod.OR)
@@ -45,6 +45,12 @@ class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
     def parse_lidar_data(items_path, json_path) -> dict:
+        """
+        Parse the Lidar Calibration data to build all the scene LidarPcdData objects
+        :param items_path: Paths to the downloaded items directory
+        :param json_path: Paths to the downloaded annotations JSON files directory
+        :return: lidar_data: Dictionary containing mapping of frame number to LidarPcdData object
+        """
         # TODO add docstring + explain how Pandaset ino is saved and gathered
         lidar_data = dict()
 
@@ -100,6 +106,13 @@ class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
     def parse_cameras_data(items_path, json_path) -> dict:
+        """
+        Parse the Cameras Calibration data to build all the scene LidarCameraData and LidarImageData objects
+        :param items_path: Paths to the downloaded items directory
+        :param json_path: Paths to the downloaded annotations JSON files directory
+        :return: lidar_data: Dictionary containing mapping of camera and frame number
+        to LidarCameraData and LidarImageData objects
+        """
         cameras_data = dict()
 
         camera_json_path = os.path.join(json_path, "camera")
@@ -188,7 +201,13 @@ class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
     def parse_annotations(frames_item: dl.Item, items_path, json_path):
-        annotations_json_path = os.path.join(json_path, "annotations")
+        """
+        Parse the annotations data to build and upload the annotations to the frames.json item
+        :param items_path: Paths to the downloaded items directory
+        :param json_path: Paths to the downloaded annotations JSON files directory
+        :return: None
+        """
+        # annotations_json_path = os.path.join(json_path, "annotations")
         annotations_items_path = os.path.join(items_path, "annotations")
 
         builder = frames_item.annotations.builder()
@@ -257,14 +276,15 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
         builder.upload()
         frames_item.dataset.update_labels(label_list=list(labels), upsert=True)
-        return frames_item
 
     # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
     def build_lidar_scene(lidar_data: dict, cameras_data: dict):
         """
-        Convert the calibration data to a LidarScene object
-        :return: buffer: BytesIO buffer with the LidarScene data to be uploaded to the dataloop platform as JSON
+        Merge the all the object of lidar_data and cameras_data to build the LidarScene object that will be uploaded as
+        the frames.json item
+        :return: scene_data: LidarScene data as JSON that will to be uploaded to the dataloop platform as
+        the frames.json item
         """
         scene = lidar_scene.LidarScene()
         frames_number = len(lidar_data)
@@ -293,7 +313,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
         scene_data = scene.to_json()
         return scene_data
 
-    # TODO: work with dir items instead of remote path
+    # TODO: Check the possibility to use dir Item instead of remote_path
     def run(self, dataset: dl.Dataset, remote_path: str = "/"):
         """
         Run the parser
@@ -316,25 +336,24 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 download_path=download_path
             )
 
-            # lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
-            # cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
-            # scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
-            #
-            # frames_item = dataset.items.upload(
-            #     remote_name="frames.json",
-            #     remote_path=f"/{remote_path}",
-            #     local_path=json.dumps(scene_data).encode(),
-            #     overwrite=True,
-            #     item_metadata={
-            #         "system": {
-            #             "shebang": {
-            #                 "dltype": "PCDFrames"
-            #             }
-            #         },
-            #         "fps": 1
-            #     }
-            # )
-            frames_item = dl.items.get(item_id="673a1c4d94a8e6395e093ef0")
+            lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
+            cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
+            scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
+
+            frames_item = dataset.items.upload(
+                remote_name="frames.json",
+                remote_path=f"/{remote_path}",
+                local_path=json.dumps(scene_data).encode(),
+                overwrite=True,
+                item_metadata={
+                    "system": {
+                        "shebang": {
+                            "dltype": "PCDFrames"
+                        }
+                    },
+                    "fps": 1
+                }
+            )
             self.parse_annotations(frames_item=frames_item, items_path=items_path, json_path=json_path)
         finally:
             shutil.rmtree(path=base_path, ignore_errors=True)
