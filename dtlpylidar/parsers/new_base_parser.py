@@ -214,9 +214,6 @@ class LidarBaseParser(dl.BaseServiceRunner):
             frame_pcd_rotation = np.array(
                 [frame_pcd_rotation["x"], frame_pcd_rotation["y"], frame_pcd_rotation["z"], frame_pcd_rotation["w"]]
             )
-            # TODO: fix rotation
-            # frame_pcd_rotation = transformations.euler_from_quaternion(*frame_pcd_rotation)
-            # frame_pcd_rotation = transformations.quaternion_from_euler(*[0, 0, frame_pcd_rotation.tolist()[-1]])
 
             cuboids_csv_data = pd.read_csv(filepath_or_buffer=cuboids_csv)
             for _, row_data in cuboids_csv_data.iterrows():
