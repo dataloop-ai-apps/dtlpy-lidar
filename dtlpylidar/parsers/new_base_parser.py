@@ -45,6 +45,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
     def parse_lidar_data(items_path, json_path) -> dict:
+        # TODO add docstring + explain how Pandaset ino is saved and gathered
         lidar_data = dict()
 
         lidar_json_path = os.path.join(json_path, "lidar")
@@ -66,14 +67,6 @@ class LidarBaseParser(dl.BaseServiceRunner):
         for lidar_frame_idx, lidar_json in enumerate(lidar_jsons):
             with open(lidar_json, 'r') as f:
                 lidar_json_data = json.load(f)
-
-            # lidar_data = {
-            #     "path": pathlib.Path(lidar_json).absolute(),
-            #     "timestamp": timestamps_json_data[lidar_frame_idx],
-            #     "position": poses_json_data[lidar_frame_idx]["position"],
-            #     "heading": poses_json_data[lidar_frame_idx]["heading"],
-            #     "cameras": dict()
-            # }
 
             ground_map_id = lidar_json_data.get("metadata", dict()).get("user", dict()).get(
                 "lidar_ground_detection", dict()).get("groundMapId", None)
@@ -111,15 +104,6 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
         camera_json_path = os.path.join(json_path, "camera")
         camera_items_path = os.path.join(items_path, "camera")
-
-        # camera_list = [
-        #     'front_camera',
-        #     'front_left_camera',
-        #     'left_camera',
-        #     'back_camera',
-        #     'right_camera',
-        #     'front_right_camera'
-        # ]
 
         camera_folders_list = sorted(os.listdir(camera_json_path))
         for camera_folder_idx, camera_folder in enumerate(camera_folders_list):
@@ -230,6 +214,9 @@ class LidarBaseParser(dl.BaseServiceRunner):
             frame_pcd_rotation = np.array(
                 [frame_pcd_rotation["x"], frame_pcd_rotation["y"], frame_pcd_rotation["z"], frame_pcd_rotation["w"]]
             )
+            # TODO: fix rotation
+            frame_pcd_rotation = transformations.euler_from_quaternion(*frame_pcd_rotation)
+            frame_pcd_rotation = transformations.quaternion_from_euler(*[0, 0, frame_pcd_rotation.tolist()[-1]])
 
             cuboids_csv_data = pd.read_csv(filepath_or_buffer=cuboids_csv)
             for _, row_data in cuboids_csv_data.iterrows():
@@ -307,6 +294,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
         scene_data = scene.to_json()
         return scene_data
 
+    # TODO: work with dir items instead of remote path
     def run(self, dataset: dl.Dataset, remote_path: str = "/"):
         """
         Run the parser
@@ -329,25 +317,24 @@ class LidarBaseParser(dl.BaseServiceRunner):
                 download_path=download_path
             )
 
-            # lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
-            # cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
-            # scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
+            lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
+            cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
+            scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
 
-            # frames_item = dataset.items.upload(
-            #     remote_name="frames.json",
-            #     remote_path=f"/{remote_path}",
-            #     local_path=json.dumps(scene_data).encode(),
-            #     overwrite=True,
-            #     item_metadata={
-            #         "system": {
-            #             "shebang": {
-            #                 "dltype": "PCDFrames"
-            #             }
-            #         },
-            #         "fps": 1
-            #     }
-            # )
-            frames_item = dl.items.get(item_id="673a1c4d94a8e6395e093ef0")
+            frames_item = dataset.items.upload(
+                remote_name="frames.json",
+                remote_path=f"/{remote_path}",
+                local_path=json.dumps(scene_data).encode(),
+                overwrite=True,
+                item_metadata={
+                    "system": {
+                        "shebang": {
+                            "dltype": "PCDFrames"
+                        }
+                    },
+                    "fps": 1
+                }
+            )
             self.parse_annotations(frames_item=frames_item, items_path=items_path, json_path=json_path)
         finally:
             shutil.rmtree(path=base_path, ignore_errors=True)
