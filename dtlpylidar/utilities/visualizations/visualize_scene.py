@@ -36,7 +36,7 @@ def extract_dataloop_data(frames_item: dl.Item, frame_num: int):
     return pcd_data, cameras_data
 
 
-def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: dict):
+def create_open_3d_scene_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: dict):
     dataset = frames_item.dataset
 
     # Create PCD open3d object
@@ -142,37 +142,97 @@ def create_open_3d_objects(frames_item: dl.Item, pcd_data: dict, cameras_data: d
     return pcd, cameras
 
 
-def build_visualization(pcd: PointCloud, cameras: list, dark_mode: bool):
+def create_open_3d_annotations_objects(frames_item: dl.Item, pcd_data: dict):
+    # Calculate the Quaternion
+    # lidar_quaternion = np.array([
+    #     pcd_data["rotation"]["x"],
+    #     pcd_data["rotation"]["y"],
+    #     pcd_data["rotation"]["z"],
+    #     pcd_data["rotation"]["w"]
+    # ])
+    #
+    # # Calculate the Position
+    # lidar_position = np.array([
+    #     pcd_data["translation"]["x"],
+    #     pcd_data["translation"]["y"],
+    #     pcd_data["translation"]["z"]
+    # ])
+
+    labels_map = frames_item.dataset.labels_flat_dict
+
+    annotations_data = list()
+    annotations = frames_item.annotations.list()
+    annotation: dl.Annotation
+    for annotation in annotations:
+        if annotation.type == dl.AnnotationType.CUBE3D.value:
+            annotation_definition: dl.Cube3d = annotation.annotation_definition
+            annotation_position = annotation_definition.position
+            annotation_rotation = transformations.rotation_matrix_from_euler(*annotation_definition.rotation)
+            annotation_scale = annotation_definition.scale
+
+            cuboid = o3d.geometry.TriangleMesh.create_box(
+                width=annotation_scale[0] * 2,
+                height=annotation_scale[1] * 2,
+                depth=annotation_scale[2] * 2
+            )
+
+            # Set Cuboid color
+            annotation_label_data = labels_map.get(annotation.label, None)
+            if annotation_label_data is None:
+                hex_color = '000000'
+            else:
+                hex_color = annotation_label_data.color.lstrip('#')
+            annotation_color = list(float(int(hex_color[i:i + 2], 16) / 255) for i in (0, 2, 4))
+            cuboid.paint_uniform_color(annotation_color)
+
+            # Set Cuboid Translate and Rotate
+            cuboid.translate(annotation_position)
+            cuboid.rotate(annotation_rotation)
+
+            annotations_data.append(cuboid)
+
+    return annotations_data
+
+
+def build_visualization(pcd: PointCloud, cameras: list, annotations_data: list,
+                        dark_mode: bool, rgb_points_color: bool = False):
     # Initialize the Visualizer
     vis = o3d.visualization.Visualizer()
     vis.create_window(visible=True)
     vis.get_render_option().background_color = [0, 0, 0] if dark_mode else [1, 1, 1]
+    if not rgb_points_color:
+        pcd.paint_uniform_color([1, 1, 1] if dark_mode else [0, 0, 0])
 
     # Add the pcd
-    pcd.paint_uniform_color([1, 1, 1] if dark_mode else [0, 0, 0])
     vis.add_geometry(pcd)
 
     # Add the cameras
     for camera in cameras:
         vis.add_geometry(camera)
 
+    for annotation in annotations_data:
+        vis.add_geometry(annotation)
+
     # Run open3d Visualizer
     vis.run()
 
 
-def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool):
+def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool, rgb_points_color: bool = False):
     pcd_data, cameras_data = extract_dataloop_data(frames_item=frames_item, frame_num=frame_num)
-    pcd, cameras = create_open_3d_objects(frames_item=frames_item, pcd_data=pcd_data, cameras_data=cameras_data)
-    build_visualization(pcd=pcd, cameras=cameras, dark_mode=dark_mode)
+    pcd, cameras = create_open_3d_scene_objects(frames_item=frames_item, pcd_data=pcd_data, cameras_data=cameras_data)
+    annotations_data = create_open_3d_annotations_objects(frames_item=frames_item, pcd_data=pcd_data)
+    build_visualization(pcd=pcd, cameras=cameras, annotations_data=annotations_data, dark_mode=dark_mode, rgb_points_color=rgb_points_color)
 
 
 def main():
-    frames_item_id = "<frames-item-id>"
+    frames_item_id = "66cb3f285c292a716e6271b5"
     frame_num = 0
     dark_mode = True
+    rgb_points_color = True
 
     frames_item = dl.items.get(item_id=frames_item_id)
-    visualize_in_open_3d(frames_item=frames_item, frame_num=frame_num, dark_mode=dark_mode)
+    visualize_in_open_3d(frames_item=frames_item, frame_num=frame_num, dark_mode=dark_mode,
+                         rgb_points_color=rgb_points_color)
 
 
 if __name__ == '__main__':
