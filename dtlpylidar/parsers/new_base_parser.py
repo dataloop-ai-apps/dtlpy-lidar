@@ -288,7 +288,6 @@ class LidarBaseParser(dl.BaseServiceRunner):
         builder.upload()
         frames_item.dataset.update_labels(label_list=list(labels), upsert=True)
 
-    # TODO: Add to docs to first convert the PLY to PCD
     @staticmethod
     def build_lidar_scene(lidar_data: dict, cameras_data: dict):
         """
