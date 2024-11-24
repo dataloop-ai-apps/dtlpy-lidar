@@ -4,6 +4,7 @@ import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud
 import dtlpylidar.utilities.transformations as transformations
+from dtlpylidar import QuaternionRotation
 
 
 def extract_dataloop_data(frames_item: dl.Item, frame_num: int):
@@ -143,53 +144,54 @@ def create_open_3d_scene_objects(frames_item: dl.Item, pcd_data: dict, cameras_d
 
 
 def create_open_3d_annotations_objects(frames_item: dl.Item, pcd_data: dict):
-    # Calculate the Quaternion
-    # lidar_quaternion = np.array([
-    #     pcd_data["rotation"]["x"],
-    #     pcd_data["rotation"]["y"],
-    #     pcd_data["rotation"]["z"],
-    #     pcd_data["rotation"]["w"]
-    # ])
-    #
-    # # Calculate the Position
-    # lidar_position = np.array([
-    #     pcd_data["translation"]["x"],
-    #     pcd_data["translation"]["y"],
-    #     pcd_data["translation"]["z"]
-    # ])
-
-    labels_map = frames_item.dataset.labels_flat_dict
-
     annotations_data = list()
     annotations = frames_item.annotations.list()
+    labels_map = frames_item.dataset.labels_flat_dict
+
     annotation: dl.Annotation
     for annotation in annotations:
         if annotation.type == dl.AnnotationType.CUBE3D.value:
-            annotation_definition: dl.Cube3d = annotation.annotation_definition
-            annotation_position = annotation_definition.position
-            annotation_rotation = transformations.rotation_matrix_from_euler(*annotation_definition.rotation)
-            annotation_scale = annotation_definition.scale
-
-            cuboid = o3d.geometry.TriangleMesh.create_box(
-                width=annotation_scale[0] * 2,
-                height=annotation_scale[1] * 2,
-                depth=annotation_scale[2] * 2
-            )
-
-            # Set Cuboid color
+            # Get Cuboid Color
             annotation_label_data = labels_map.get(annotation.label, None)
             if annotation_label_data is None:
                 hex_color = '000000'
             else:
                 hex_color = annotation_label_data.color.lstrip('#')
             annotation_color = list(float(int(hex_color[i:i + 2], 16) / 255) for i in (0, 2, 4))
-            cuboid.paint_uniform_color(annotation_color)
 
-            # Set Cuboid Translate and Rotate
-            cuboid.translate(annotation_position)
-            cuboid.rotate(annotation_rotation)
+            # Get Cuboid Points
+            annotation_definition: dl.Cube3d = annotation.annotation_definition
+            cuboid_points = transformations.calc_cube_points(
+                annotation_translation=annotation_definition.position,
+                annotation_rotation=annotation_definition.rotation,
+                annotation_scale=annotation_definition.scale,
+                apply_rotation=True
+            )
 
-            annotations_data.append(cuboid)
+            # Get Cuboid Lines
+            cuboid_lines = [
+                [0, 1],
+                [0, 2],
+                [1, 3],
+                [2, 3],
+                [4, 5],
+                [4, 6],
+                [5, 7],
+                [6, 7],
+                [0, 4],
+                [1, 5],
+                [2, 6],
+                [3, 7],
+            ]
+
+            # Create LineSet object of the Cuboid
+            line_set = o3d.geometry.LineSet(points=o3d.utility.Vector3dVector(cuboid_points),
+                                            lines=o3d.utility.Vector2iVector(cuboid_lines))
+            annotation_color_list = [annotation_color for _ in range(len(cuboid_lines))]
+            line_set.colors = o3d.utility.Vector3dVector(annotation_color_list)
+
+            # Add the LineSet object to the annotations_data list
+            annotations_data.append(line_set)
 
     return annotations_data
 
@@ -225,7 +227,7 @@ def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool, 
 
 
 def main():
-    frames_item_id = "66cb3f285c292a716e6271b5"
+    frames_item_id = ""
     frame_num = 0
     dark_mode = True
     rgb_points_color = True
