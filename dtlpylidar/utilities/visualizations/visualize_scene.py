@@ -143,7 +143,7 @@ def create_open_3d_scene_objects(frames_item: dl.Item, pcd_data: dict, cameras_d
     return pcd, cameras
 
 
-def create_open_3d_annotations_objects(frames_item: dl.Item, pcd_data: dict):
+def create_open_3d_annotations_objects(frames_item: dl.Item):
     annotations_data = list()
     annotations = frames_item.annotations.list()
     labels_map = frames_item.dataset.labels_flat_dict
@@ -222,7 +222,7 @@ def build_visualization(pcd: PointCloud, cameras: list, annotations_data: list,
 def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool, rgb_points_color: bool = False):
     pcd_data, cameras_data = extract_dataloop_data(frames_item=frames_item, frame_num=frame_num)
     pcd, cameras = create_open_3d_scene_objects(frames_item=frames_item, pcd_data=pcd_data, cameras_data=cameras_data)
-    annotations_data = create_open_3d_annotations_objects(frames_item=frames_item, pcd_data=pcd_data)
+    annotations_data = create_open_3d_annotations_objects(frames_item=frames_item)
     build_visualization(pcd=pcd, cameras=cameras, annotations_data=annotations_data, dark_mode=dark_mode, rgb_points_color=rgb_points_color)
 
 
