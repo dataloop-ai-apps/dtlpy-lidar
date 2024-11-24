@@ -4,7 +4,6 @@ import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud
 import dtlpylidar.utilities.transformations as transformations
-from dtlpylidar import QuaternionRotation
 
 
 def extract_dataloop_data(frames_item: dl.Item, frame_num: int):
@@ -143,13 +142,23 @@ def create_open_3d_scene_objects(frames_item: dl.Item, pcd_data: dict, cameras_d
     return pcd, cameras
 
 
-def create_open_3d_annotations_objects(frames_item: dl.Item):
+def create_open_3d_annotations_objects(frames_item: dl.Item, frame_num: int):
     annotations_data = list()
     annotations = frames_item.annotations.list()
     labels_map = frames_item.dataset.labels_flat_dict
 
     annotation: dl.Annotation
     for annotation in annotations:
+        # Get the updated annotation entity
+        annotation = dl.annotations.get(annotation_id=annotation.id)
+        if frame_num not in list(annotation.frames.keys()):
+            continue
+        else:
+            frame_annotation = annotation.frames[frame_num]
+            if frame_annotation is not None:
+                annotation: dl.entities.FrameAnnotation = frame_annotation
+
+        # Check if the annotation is a Cuboid
         if annotation.type == dl.AnnotationType.CUBE3D.value:
             # Get Cuboid Color
             annotation_label_data = labels_map.get(annotation.label, None)
@@ -222,7 +231,7 @@ def build_visualization(pcd: PointCloud, cameras: list, annotations_data: list,
 def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool, rgb_points_color: bool = False):
     pcd_data, cameras_data = extract_dataloop_data(frames_item=frames_item, frame_num=frame_num)
     pcd, cameras = create_open_3d_scene_objects(frames_item=frames_item, pcd_data=pcd_data, cameras_data=cameras_data)
-    annotations_data = create_open_3d_annotations_objects(frames_item=frames_item)
+    annotations_data = create_open_3d_annotations_objects(frames_item=frames_item, frame_num=frame_num)
     build_visualization(pcd=pcd, cameras=cameras, annotations_data=annotations_data, dark_mode=dark_mode, rgb_points_color=rgb_points_color)
 
 
