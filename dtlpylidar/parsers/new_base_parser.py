@@ -17,7 +17,7 @@ logger = logging.Logger(name="lidar_base_parser")
 class LidarBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def download_data(dataset: dl.Dataset, remote_path: str, download_path) -> tuple:
+    def download_data(dataset: dl.Dataset, remote_path: str, download_path: str) -> tuple:
         """
         Download the required data for the parser
         :param dataset: Input dataset
@@ -47,7 +47,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def parse_lidar_data(items_path, json_path) -> dict:
+    def parse_lidar_data(items_path: str, json_path: str) -> dict:
         """
         Parse the Lidar Calibration data to build all the scene LidarPcdData objects
         :param items_path: Paths to the downloaded items directory
@@ -108,7 +108,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def parse_cameras_data(items_path, json_path) -> dict:
+    def parse_cameras_data(items_path: str, json_path: str) -> dict:
         """
         Parse the Cameras Calibration data to build all the scene LidarCameraData and LidarImageData objects
         :param items_path: Paths to the downloaded items directory
@@ -206,7 +206,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
     # TODO: Override this method in the derived class if needed
     @staticmethod
-    def parse_annotations(frames_item: dl.Item, items_path, json_path):
+    def parse_annotations(frames_item: dl.Item, items_path: str, json_path: str):
         """
         Parse the annotations data to build and upload the annotations to the frames.json item
         :param items_path: Paths to the downloaded items directory
