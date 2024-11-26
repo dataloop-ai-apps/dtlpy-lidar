@@ -366,7 +366,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
             )
             self.parse_annotations(frames_item=frames_item, items_path=items_path, json_path=json_path)
         finally:
-            shutil.rmtree(path=base_path, ignore_errors=True)
+            shutil.rmtree(path=download_path, ignore_errors=True)
 
         return frames_item
 
