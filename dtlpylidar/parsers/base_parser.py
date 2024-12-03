@@ -145,13 +145,13 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         uid = str(uuid.uuid4())
         base_dataset_name = self.dataset.name
         base_path = "{}_{}".format(base_dataset_name, uid)
+        items_download_path = os.path.join(os.getcwd(), base_path)
         try:
-            items_download_path = os.path.join(os.getcwd(), base_path)
             self.dataset.download_annotations(local_path=items_download_path)
             self.jsons_path = os.path.join(items_download_path, "json")
             frames_item = self.parse_lidar_data(mapping_item=mapping_item)
         finally:
-            shutil.rmtree(base_path, ignore_errors=True)
+            shutil.rmtree(items_download_path, ignore_errors=True)
         return frames_item
 
 
