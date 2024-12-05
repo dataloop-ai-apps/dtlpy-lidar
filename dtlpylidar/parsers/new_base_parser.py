@@ -381,10 +381,10 @@ if __name__ == '__main__':
     test_parser()
 
 # TODO:
-# Show samples of the raw data JSON.
-# mages_and_pcds.LidarPcdData - add comment that explains the dtlpylidar classes
+# Show samples of the raw data JSON. - V
+# images_and_pcds.LidarPcdData - add comment that explains the dtlpylidar classes _
 #
-# make different notebooks for annotations and parsing data
-# Parse Annotations (Customizable)
+# make different notebooks for annotations and parsing data - V
+# Parse Annotations (Customizable) - V
 #
-# add contex table for the notebooks
+# add contex table for the notebooks - V
