@@ -1,9 +1,6 @@
 from dtlpylidar.parser_base import extrinsic_calibrations
 from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
-import dtlpylidar.utilities.transformations as transformations
 import dtlpy as dl
-import pandas as pd
-import numpy as np
 import os
 import json
 import uuid
@@ -32,13 +29,8 @@ class LidarBaseParser(dl.BaseServiceRunner):
         dataset.download_annotations(local_path=download_path, filters=filters)
 
         # Download required binaries (Calibrations Data)
-        # Pandaset Calibration Data is saved in JSON files (Like: poses.json, intrinsics.json, timestamps.json)
+        # PandaSet Calibration Data is saved in JSON files (Like: poses.json, intrinsics.json, timestamps.json)
         filters = dl.Filters(field="metadata.system.mimetype", values="*json*")
-        dataset.items.download(local_path=download_path, filters=filters)
-
-        # Download required binaries (Annotations Data)
-        # Pandaset Annotations Data is saved in CSV files (Like: 01.csv in cuboids folder)
-        filters = dl.Filters(field="metadata.system.mimetype", values="*csv*")
         dataset.items.download(local_path=download_path, filters=filters)
 
         items_path = os.path.join(download_path, "items", remote_path)
@@ -204,90 +196,6 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
         return cameras_data
 
-    # TODO: Override this method in the derived class if needed
-    @staticmethod
-    def parse_annotations(frames_item: dl.Item, items_path: str, json_path: str):
-        """
-        Parse the annotations data to build and upload the annotations to the frames.json item
-        :param items_path: Paths to the downloaded items directory
-        :param json_path: Paths to the downloaded annotations JSON files directory
-        :return: None
-        """
-        # annotations_json_path = os.path.join(json_path, "annotations")
-        annotations_items_path = os.path.join(items_path, "annotations")
-
-        builder = frames_item.annotations.builder()
-        frames_json_data = json.loads(s=frames_item.download(save_locally=False).getvalue())
-
-        next_object_id = 0
-        uid_to_object_id_map = dict()
-        labels = set()
-
-        # Parse the cuboid annotations and add them to the annotations builder
-        cuboids_items_path = os.path.join(annotations_items_path, "cuboids")
-        cuboids_csvs = pathlib.Path(cuboids_items_path).rglob('*.csv')
-        cuboids_csvs = sorted(cuboids_csvs, key=lambda x: int(x.stem))
-
-        for csv_frame_idx, cuboids_csv in enumerate(cuboids_csvs):
-            # Getting the Lidar Scene Frame Translation and Rotation
-            frame_pcd_translation = frames_json_data["frames"][csv_frame_idx]["translation"]
-            frame_pcd_translation = np.array(
-                [frame_pcd_translation["x"], frame_pcd_translation["y"], frame_pcd_translation["z"]]
-            )
-            frame_pcd_rotation = frames_json_data["frames"][csv_frame_idx]["rotation"]
-            frame_pcd_rotation = np.array(
-                [frame_pcd_rotation["x"], frame_pcd_rotation["y"], frame_pcd_rotation["z"], frame_pcd_rotation["w"]]
-            )
-
-            # Opening the current Scene Frame, cuboid annotations CSV file to get the cuboids annotation data
-            cuboids_csv_data = pd.read_csv(filepath_or_buffer=cuboids_csv)
-            for _, row_data in cuboids_csv_data.iterrows():
-                object_id = uid_to_object_id_map.get(row_data["uuid"], None)
-                if object_id is None:
-                    object_id = next_object_id
-                    uid_to_object_id_map[row_data["uuid"]] = object_id
-                    next_object_id += 1
-
-                ann_label = row_data["label"]
-                ann_position = np.array([row_data["position.x"], row_data["position.y"], row_data["position.z"]])
-                ann_quaternion = transformations.quaternion_from_euler(*[0, 0, row_data["yaw"]])
-                ann_scale = np.array([row_data["dimensions.x"], row_data["dimensions.y"], row_data["dimensions.z"]])
-
-                # Calculate the transform matrix of the cuboid annotation relatively to the Scene Frame
-                ann_transform_matrix = transformations.calc_cuboid_scene_transform_matrix(
-                    cuboid_position=ann_position,
-                    cuboid_quaternion=ann_quaternion,
-                    cuboid_scale=ann_scale,
-                    scene_position=frame_pcd_translation,
-                    scene_quaternion=frame_pcd_rotation
-                )
-
-                # Extract the cuboid Translation and Rotation from the transform matrix
-                ann_position = transformations.translation_vector_from_transform_matrix(
-                    transform_matrix=ann_transform_matrix
-                )
-                ann_rotation_matrix = transformations.rotation_matrix_from_transform_matrix(
-                    transform_matrix=ann_transform_matrix
-                )
-                ann_rotation = transformations.euler_from_rotation_matrix(rotation_matrix=ann_rotation_matrix)
-
-                # Add the cuboid annotation to the annotations builder
-                annotation_definition = dl.Cube3d(
-                    label=ann_label,
-                    position=ann_position,
-                    scale=ann_scale,
-                    rotation=ann_rotation
-                )
-                builder.add(
-                    annotation_definition=annotation_definition,
-                    object_id=object_id,
-                    frame_num=csv_frame_idx
-                )
-                labels.add(ann_label)
-
-        builder.upload()
-        frames_item.dataset.update_labels(label_list=list(labels), upsert=True)
-
     @staticmethod
     def build_lidar_scene(lidar_data: dict, cameras_data: dict):
         """
@@ -364,7 +272,6 @@ class LidarBaseParser(dl.BaseServiceRunner):
                     "fps": 1
                 }
             )
-            self.parse_annotations(frames_item=frames_item, items_path=items_path, json_path=json_path)
         finally:
             shutil.rmtree(path=download_path, ignore_errors=True)
 
@@ -379,12 +286,3 @@ def test_parser():
 
 if __name__ == '__main__':
     test_parser()
-
-# TODO:
-# Show samples of the raw data JSON. - V
-# images_and_pcds.LidarPcdData - add comment that explains the dtlpylidar classes _
-#
-# make different notebooks for annotations and parsing data - V
-# Parse Annotations (Customizable) - V
-#
-# add contex table for the notebooks - V
