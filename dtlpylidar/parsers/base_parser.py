@@ -18,7 +18,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.jsons_path = ""
         self.absolute_path_search = True
 
-    def parse_lidar_data(self, mapping_item: dl.Item):
+    def parse_lidar_data(self, mapping_item: dl.Item) -> dl.Item:
         scene = lidar_scene.LidarScene()
         frames = self.mapping_data.get("frames", dict())
         for frame_num, frame_details in frames.items():
@@ -134,7 +134,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         )
         return frames_item
 
-    def parse_data(self, mapping_item: dl.Item):
+    def parse_data(self, mapping_item: dl.Item) -> dl.Item:
         if "json" not in mapping_item.metadata.get("system", dict()).get("mimetype"):
             raise Exception("Expected item of type json")
 
