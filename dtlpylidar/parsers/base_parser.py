@@ -29,7 +29,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
             else:
                 pcd_filepath = os.path.join(self.jsons_path,
                                             mapping_item.dir.lstrip('/'),
-                                            frame_details.get("path").lstrip('/'))
+                                            frame_details.get("path"))
             pcd_filepath = pcd_filepath.replace(".pcd", ".json")
             with open(pcd_filepath, 'r') as f:
                 pcd_json = json.load(f)
