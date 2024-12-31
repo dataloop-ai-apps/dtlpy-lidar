@@ -1,4 +1,4 @@
-# Dataloop Lidar SDK
+# Dataloop LiDAR SDK
 
 <p align="center">
   <img height="40mm" src="https://dataloop.ai/wp-content/uploads/2024/02/dataloop-logo-main.svg">
@@ -74,14 +74,20 @@ visualize_in_open_3d(frames_item=frames_item, frame_num=frame_num, dark_mode=dar
 
 ## Description
 
-The LiDAR application includes all the pre-processing, post-processing and utilities that are needed in order to work
-with lidar on Dataloop.
+The Dataloop LiDAR SDK application includes all the pre-processing and utilities for working with 
+LiDAR data on the Dataloop platform.
 
-The application will also include utility functions to help with 3d transformations and visualizations.
+**Pre-processing:**
 
-Pre-processing:
+* [Dataloop Base Parser](dtlpylidar/parsers/PARSERS_README.md) - The base parser to create a LiDAR video file.
 
-* [Dataloop Base Parser](dtlpylidar/parsers/PARSERS_README.md).
+
+**Utilities:**
+
+* [3D Transformations](dtlpylidar/utilities/transformations/transformations.py) - Utility functions to perform 3D transformations on LiDAR calibration data.
+* [Open3D Visualizations](dtlpylidar/utilities/visualizations/visualize_scene.py) - Visualize locally in Open3D a frame from the remote LiDAR video file.
+
+---
 
 ## Contributors
 
