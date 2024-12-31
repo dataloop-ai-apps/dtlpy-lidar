@@ -43,10 +43,31 @@ Run the following script to create the LiDAR video file.
 import dtlpy as dl
 from dtlpylidar.parsers.base_parser import LidarFileMappingParser
 
-dataset = dl.datasets.get(dataset_id='dataset-id')
+dataset = dl.datasets.get(dataset_id="<dataset id>")
 mapping_item = dataset.items.get(item_id="<mapping.json item id>")
 frames_item = LidarFileMappingParser().parse_data(mapping_item=mapping_item)
 frames_item.open_in_web()
+```
+
+---
+
+## Local Visualization (using Open3D)
+
+To visualize locally a frame from the LiDAR video file on the remote dataset, you can use the following code snippet:
+
+```python
+import dtlpy as dl
+from dtlpylidar.utilities.visualizations.visualize_scene import visualize_in_open_3d
+
+dataset = dl.datasets.get(dataset_id="<dataset id>")
+frames_item = dataset.items.get(item_id="<frames.json item id>")
+
+frame_num = 0  # frame number to visualize
+dark_mode = True  # dark/light mode visualization
+rgb_points_color = True  # (If the point cloud has RGB points) color the points with the RGB values
+
+visualize_in_open_3d(frames_item=frames_item, frame_num=frame_num, dark_mode=dark_mode, 
+                     rgb_points_color=rgb_points_color)
 ```
 
 ---
@@ -68,4 +89,3 @@ Pre-processing:
 
 We welcome anyone to help us improve this app.  
 [Here's](CONTRIBUTING.md) a detailed instructions to help you open a bug or ask for a feature request
-
