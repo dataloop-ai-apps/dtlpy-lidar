@@ -157,7 +157,6 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
 
 def test_parse_data():
     item_id = "<mapping-item-id>"
-
     parser = LidarFileMappingParser()
     mapping_item = dl.items.get(item_id=item_id)
     print(parser.parse_data(mapping_item=mapping_item))

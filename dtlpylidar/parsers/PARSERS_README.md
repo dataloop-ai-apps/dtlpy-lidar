@@ -4,32 +4,32 @@
 
 ### Description:
 
-A service that parses lidar data inside a Dataloop Dataset,
-and stitches all the files together to create a LiDAR video file.
+Dataloop LiDAR parser is a script that takes a dataset with raw LiDAR data and creates a LiDAR video file.
+The LiDAR video file is a collection of:
 
-The service support datasets with files structure as described in:
-[LIDAR Data Setup](https://dataloop.ai/docs/lidar-data-setup).
+* PCDs
+* Image from multiple cameras
+* Calibrations data
 
+Each frame in the LiDAR video file is composed of a single instance of each one of the different sensors combined along
+with their calibrations.
+
+### Pre-requisites:
+
+To start working with our base LiDAR parser, you need to follow the data setup as described in the following link
+[LIDAR Data Setup](https://docs.dataloop.ai/docs/lidar-data-setup?highlight=lidar).
 
 ### How to run:
 
-To run the service on a lidar dataset do as follows:
-1. Make sure the service is deployed on the requested project.
-2. Go to the requested lidar dataset and execute the service on the `mapping.json` item 
-   (See example of supported [mapping.json](assets%2Fmapping.json) file).
-3. Wait until the service finishes the execution and a `frames.json` item gets created.
+Once the data is set up, and the `mapping.json` file is uploaded to the platform, you can run the following script to
+create the LiDAR video file.
 
-### Flow:
+```python
+import dtlpy as dl
+from dtlpylidar.parsers.base_parser import LidarFileMappingParser
 
-The service works as follows:
-1. Receives as an input `mapping.json` item and opens it.
-2. Initializes a `LidarScene` object for holding the parsed lidar data.
-3. Goes over each available frame in the `mapping.json` item, and does as follows:
-   1. Gets the frame PCD file and it's calibrations data.
-   2. Gets the frame Camera Images and their calibrations data.
-   3. Stitches the frame files and append them to the `LidarScene` object.
-4. Builds from the `LidarScene` object the `frames.json` item (LiDAR video file) and upload it to the dataset.
-
-### Requirements:
-
-`dtlpy`
+dataset = dl.datasets.get(dataset_id='dataset-id')
+mapping_item = dataset.items.get(item_id="<mapping.json item id>")
+frames_item = LidarFileMappingParser().parse_data(mapping_item=mapping_item)
+frames_item.open_in_web()
+```
