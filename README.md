@@ -7,7 +7,7 @@
 ---
 
 <p align="center">
-  <a href="https://dataloop.ai/about/"> <img src="assets/dataloop_lidar_studio.png"></a>
+  <a href="https://dataloop.ai/solutions/lidar-annotation-platform/"> <img src="assets/dataloop_lidar_studio.png"></a>
 </p>
 
 [![versions](https://img.shields.io/pypi/pyversions/dtlpy.svg)](https://github.com/dataloop-ai/dtlpy)
