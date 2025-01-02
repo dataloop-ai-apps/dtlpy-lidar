@@ -232,7 +232,7 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
         return scene_data
 
     # TODO: Check the possibility to use dir Item instead of remote_path
-    def run(self, dataset: dl.Dataset, remote_path: str = "/"):
+    def run(self, dataset: dl.Dataset, remote_path: str = "/") -> dl.Item:
         """
         Run the parser
         :param dataset: Input dataset
@@ -278,11 +278,13 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
         return frames_item
 
 
-def test_parser():
+def run_parser():
     dataset = dl.datasets.get(dataset_id="673615818ab4c9a0b0be683e")
     parser = AdvancedBaseParser()
-    print(parser.run(dataset=dataset))
+    frames_item = parser.run(dataset=dataset)
+    # frames_item.open_in_web()
+    print(frames_item)
 
 
 if __name__ == '__main__':
-    test_parser()
+    run_parser()
