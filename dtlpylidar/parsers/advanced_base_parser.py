@@ -18,7 +18,7 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
         """
         Download the required data for the parser
         :param dataset: Input dataset
-        :param remote_path: Path to the remote folder where the Lidar data is uploaded
+        :param remote_path: Path to the remote folder where the LiDAR data is uploaded
         :param download_path: Path to the downloaded data
         :return: (items_path, json_path) Paths to the downloaded items and annotations JSON files directories
         """
@@ -41,7 +41,7 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
     @staticmethod
     def parse_lidar_data(items_path: str, json_path: str) -> dict:
         """
-        Parse the Lidar Calibration data to build all the scene LidarPcdData objects
+        Parse the LiDAR Calibration data to build all the scene LidarPcdData objects
         :param items_path: Paths to the downloaded items directory
         :param json_path: Paths to the downloaded annotations JSON files directory
         :return: lidar_data: Dictionary containing mapping of frame number to LidarPcdData object
@@ -236,7 +236,7 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
         """
         Run the parser
         :param dataset: Input dataset
-        :param remote_path: Path to the remote folder where the Lidar data is uploaded
+        :param remote_path: Path to the remote folder where the LiDAR data is uploaded
         :return: frames_item: dl.Item entity of the uploaded frames.json
         """
         if remote_path.startswith("/"):
