@@ -8,10 +8,10 @@ import logging
 import shutil
 import pathlib
 
-logger = logging.Logger(name="lidar_base_parser")
+logger = logging.Logger(name="advanced_base_parser")
 
 
-class LidarBaseParser(dl.BaseServiceRunner):
+class AdvancedBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
     def download_data(dataset: dl.Dataset, remote_path: str, download_path: str) -> tuple:
@@ -280,7 +280,7 @@ class LidarBaseParser(dl.BaseServiceRunner):
 
 def test_parser():
     dataset = dl.datasets.get(dataset_id="673615818ab4c9a0b0be683e")
-    parser = LidarBaseParser()
+    parser = AdvancedBaseParser()
     print(parser.run(dataset=dataset))
 
 
