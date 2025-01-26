@@ -1,5 +1,3 @@
-from dtlpylidar.parser_base import extrinsic_calibrations
-from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
 import os
 import dtlpy as dl
 import json
@@ -7,6 +5,9 @@ from io import BytesIO
 import uuid
 import logging
 import shutil
+
+from dtlpylidar.parser_base import (extrinsic_calibrations, images_and_pcds, camera_calibrations, lidar_frame,
+                                    lidar_scene)
 
 logger = logging.Logger(name="file_mapping_parser")
 

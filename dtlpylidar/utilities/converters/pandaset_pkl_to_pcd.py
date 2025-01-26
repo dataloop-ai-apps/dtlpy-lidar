@@ -55,15 +55,15 @@ def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
             if pose_data is not None:
                 # Apply transformation
                 position = [
-                    pose_data['position']['x'],
-                    pose_data['position']['y'],
-                    pose_data['position']['z']
+                    pose_data.get("position", dict()).get("x", 0),
+                    pose_data.get("position", dict()).get("y", 0),
+                    pose_data.get("position", dict()).get("z", 0)
                 ]
                 heading = [
-                    pose_data['heading']['x'],
-                    pose_data['heading']['y'],
-                    pose_data['heading']['z'],
-                    pose_data['heading']['w']
+                    pose_data.get("heading", dict()).get("x", 0),
+                    pose_data.get("heading", dict()).get("y", 0),
+                    pose_data.get("heading", dict()).get("z", 0),
+                    pose_data.get("heading", dict()).get("w", 0)
                 ]
                 rotation = transformations.rotation_matrix_from_quaternion(*heading)
                 transform = transformations.calc_transform_matrix(rotation=rotation, position=position)
