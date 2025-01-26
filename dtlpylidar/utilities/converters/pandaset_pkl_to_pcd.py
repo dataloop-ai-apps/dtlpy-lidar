@@ -1,19 +1,31 @@
 import os
+import json
 import pickle
 import open3d as o3d
 import pandas as pd
 
+from dtlpylidar.utilities import transformations as transformations
 
-def convert_pkl_to_pcd(input_folder, output_folder):
+
+def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
+    if apply_transformation is True:
+        poses_filepath = os.path.join(input_folder, 'poses.json')
+        with open(poses_filepath, 'rb') as fp:
+            poses_data = json.load(fp=fp)
+
     # List all .pkl files in the input folder
-    pkl_files = [f for f in os.listdir(input_folder) if f.endswith('.pkl')]
+    pkl_files = sorted([f for f in os.listdir(input_folder) if f.endswith('.pkl')])
 
     if len(pkl_files) == 0:
         print("No .pkl files found in the folder.")
         return
 
     # Process each .pkl file
-    for pkl_file in pkl_files:
+    for idx, pkl_file in enumerate(pkl_files):
+        if apply_transformation is True:
+            pose_data = poses_data[idx]
+        else:
+            pose_data = None
         pkl_file_path = os.path.join(input_folder, pkl_file)
         pcd_file_path = os.path.join(output_folder, pkl_file.replace('.pkl', '.pcd'))
 
@@ -40,6 +52,23 @@ def convert_pkl_to_pcd(input_folder, output_folder):
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(points)
 
+            if pose_data is not None:
+                # Apply transformation
+                position = [
+                    pose_data['position']['x'],
+                    pose_data['position']['y'],
+                    pose_data['position']['z']
+                ]
+                heading = [
+                    pose_data['heading']['x'],
+                    pose_data['heading']['y'],
+                    pose_data['heading']['z'],
+                    pose_data['heading']['w']
+                ]
+                rotation = transformations.rotation_matrix_from_quaternion(*heading)
+                transform = transformations.calc_transform_matrix(rotation=rotation, position=position)
+                point_cloud.transform(transform)
+
             # Save to .pcd file
             o3d.io.write_point_cloud(pcd_file_path, point_cloud)
             print(f"Successfully converted '{pkl_file_path}' to '{pcd_file_path}'")
@@ -51,7 +80,9 @@ def convert_pkl_to_pcd(input_folder, output_folder):
 def test_convert_pkl_to_pcd():
     input_folder = r"pandaset/001/lidar"
     output_folder = r"pandaset/001/lidar"
-    convert_pkl_to_pcd(input_folder=input_folder, output_folder=output_folder)
+    apply_transformation = True
+    convert_pkl_to_pcd(input_folder=input_folder, output_folder=output_folder, apply_transformation=apply_transformation)
+
 
 if __name__ == "__main__":
     test_convert_pkl_to_pcd()

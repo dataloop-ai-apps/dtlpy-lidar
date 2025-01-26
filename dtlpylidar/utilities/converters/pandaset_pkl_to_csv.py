@@ -2,6 +2,7 @@ import os
 import pickle
 import pandas as pd
 
+
 def convert_pkl_to_csv(input_folder, output_folder):
     # List all .pkl files in the input folder
     pkl_files = [f for f in os.listdir(input_folder) if f.endswith('.pkl')]
@@ -33,10 +34,12 @@ def convert_pkl_to_csv(input_folder, output_folder):
         except Exception as e:
             print(f"Failed to process {pkl_file_path}: {e}")
 
+
 def test_convert_pkl_to_csv():
     input_folder = r"pandaset/001/annotations/cuboids"
     output_folder = r"pandaset/001/annotations/cuboids"
     convert_pkl_to_csv(input_folder=input_folder, output_folder=output_folder)
+
 
 if __name__ == "__main__":
     test_convert_pkl_to_csv()
