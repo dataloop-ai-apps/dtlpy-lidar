@@ -1,24 +1,26 @@
 import os
+import pathlib
 import pickle
 import pandas as pd
 
 
 def convert_pkl_to_csv(input_folder, output_folder):
     # List all .pkl files in the input folder
-    pkl_files = [f for f in os.listdir(input_folder) if f.endswith('.pkl')]
+    pkl_filepaths = sorted(pathlib.Path(input_folder).rglob('*.pkl'))
 
-    if len(pkl_files) == 0:
+    if len(pkl_filepaths) == 0:
         print("No .pkl files found in the folder.")
         return
 
     # Process each .pkl file
-    for pkl_file in pkl_files:
-        pkl_file_path = os.path.join(input_folder, pkl_file)
-        csv_file_path = os.path.join(output_folder, pkl_file.replace('.pkl', '.csv'))
-
+    for pkl_filepath in pkl_filepaths:
+        csv_file_path = os.path.join(
+            output_folder,
+            pkl_filepath.with_suffix(".pcd").relative_to(input_folder)
+        )
         try:
             # Load the .pkl file
-            with open(pkl_file_path, 'rb') as file:
+            with open(pkl_filepath, 'rb') as file:
                 data = pickle.load(file)
 
             # Convert data to DataFrame if needed
@@ -29,10 +31,10 @@ def convert_pkl_to_csv(input_folder, output_folder):
 
             # Save to .csv file
             df.to_csv(csv_file_path, index=False)
-            print(f"Successfully converted '{pkl_file_path}' to '{csv_file_path}'")
+            print(f"Successfully converted '{pkl_filepath}' to '{csv_file_path}'")
 
         except Exception as e:
-            print(f"Failed to process {pkl_file_path}: {e}")
+            print(f"Failed to process {pkl_filepath}: {e}")
 
 
 def test_convert_pkl_to_csv():

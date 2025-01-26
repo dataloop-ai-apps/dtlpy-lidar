@@ -1,4 +1,5 @@
 import os
+import pathlib
 import json
 import pickle
 import open3d as o3d
@@ -14,24 +15,25 @@ def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
             poses_data = json.load(fp=fp)
 
     # List all .pkl files in the input folder
-    pkl_files = sorted([f for f in os.listdir(input_folder) if f.endswith('.pkl')])
+    pkl_filepaths = sorted(pathlib.Path(input_folder).rglob('*.pkl'))
 
-    if len(pkl_files) == 0:
+    if len(pkl_filepaths) == 0:
         print("No .pkl files found in the folder.")
         return
 
     # Process each .pkl file
-    for idx, pkl_file in enumerate(pkl_files):
+    for idx, pkl_filepath in enumerate(pkl_filepaths):
         if apply_transformation is True:
             pose_data = poses_data[idx]
         else:
             pose_data = None
-        pkl_file_path = os.path.join(input_folder, pkl_file)
-        pcd_file_path = os.path.join(output_folder, pkl_file.replace('.pkl', '.pcd'))
-
+        pcd_filepath = os.path.join(
+            output_folder,
+            pkl_filepath.with_suffix(".pcd").relative_to(input_folder)
+        )
         try:
             # Load the .pkl file
-            with open(pkl_file_path, 'rb') as file:
+            with open(pkl_filepath, 'rb') as file:
                 data = pickle.load(file)
 
             # Convert data to DataFrame if needed
@@ -42,7 +44,7 @@ def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
 
             # Check if required columns exist
             if not {'x', 'y', 'z'}.issubset(df.columns):
-                print(f"Missing required columns in file: {pkl_file}")
+                print(f"Missing required columns in file: {pkl_filepath}")
                 continue
 
             # Extract x, y, z coordinates
@@ -70,11 +72,11 @@ def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
                 point_cloud.transform(transform)
 
             # Save to .pcd file
-            o3d.io.write_point_cloud(pcd_file_path, point_cloud)
-            print(f"Successfully converted '{pkl_file_path}' to '{pcd_file_path}'")
+            o3d.io.write_point_cloud(str(pcd_filepath), point_cloud)
+            print(f"Successfully converted '{pkl_filepath}' to '{pcd_filepath}'")
 
         except Exception as e:
-            print(f"Failed to process {pkl_file_path}: {e}")
+            print(f"Failed to process {pkl_filepath}: {e}")
 
 
 def test_convert_pkl_to_pcd():

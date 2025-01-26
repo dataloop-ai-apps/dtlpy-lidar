@@ -117,6 +117,7 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
         :return: lidar_data: Dictionary containing mapping of camera and frame number
         to LidarCameraData and LidarImageData objects
         """
+        # Get lidar transforms for all the frames
         lidar_transform_list = list()
 
         lidar_items_path = os.path.join(items_path, "lidar")
@@ -149,6 +150,7 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
             )
             lidar_transform_list.append(lidar_transform_idx)
 
+        # Get all the cameras data
         cameras_data = dict()
 
         camera_json_path = os.path.join(json_path, "camera")
