@@ -41,7 +41,7 @@ def create_open_3d_scene_objects(frames_item: dl.Item, pcd_data: dict, cameras_d
     dataset = frames_item.dataset
 
     # Create PCD open3d object
-    pcd_filepath = dataset.items.get(item_id=pcd_data["lidar"]["lidar_pcd_id"]).download(local_path=".", overwrite=True)
+    pcd_filepath = dataset.items.get(item_id=pcd_data["lidar"]["lidar_pcd_id"]).download(local_path=".")
     pcd = o3d.io.read_point_cloud(filename=pcd_filepath)
 
     # Calculate the Quaternion
@@ -237,8 +237,8 @@ def visualize_in_open_3d(frames_item: dl.Item, frame_num: int, dark_mode: bool, 
 
 
 def main():
-    frames_item_id = "6786f2d607e5ff9d8b8c219d"
-    frame_num = 15
+    frames_item_id = ""
+    frame_num = 0
     dark_mode = True
     rgb_points_color = False
 
