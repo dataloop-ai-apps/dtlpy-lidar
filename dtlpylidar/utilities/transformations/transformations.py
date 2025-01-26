@@ -316,12 +316,16 @@ def calc_cube_points(annotation_translation, annotation_scale, annotation_rotati
         rotation_matrix = rotation_matrix_from_euler(
             rotation_x=rotation_x,
             rotation_y=rotation_y,
-            rotation_z=rotation_z)
+            rotation_z=rotation_z
+        )
         translation_matrix = calc_translation_matrix(
             position_x=position_x,
             position_y=position_y,
-            position_z=position_z)
-        cube = rotate_annotation_cube3d(annotation_corners=cube,
-                                        rotation_matrix=rotation_matrix,
-                                        translation_matrix=translation_matrix)
+            position_z=position_z
+        )
+        cube = rotate_annotation_cube3d(
+            annotation_corners=cube,
+            rotation_matrix=rotation_matrix,
+            translation_matrix=translation_matrix
+        )
     return cube
