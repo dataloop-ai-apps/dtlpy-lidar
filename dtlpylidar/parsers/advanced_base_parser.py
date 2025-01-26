@@ -140,7 +140,7 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
                 poses_json_data[idx].get("heading", dict()).get("x", 0),
                 poses_json_data[idx].get("heading", dict()).get("y", 0),
                 poses_json_data[idx].get("heading", dict()).get("z", 0),
-                poses_json_data[idx].get("heading", dict()).get("w", 0)
+                poses_json_data[idx].get("heading", dict()).get("w", 1)
             ]
             lidar_rotation_idx = transformations.rotation_matrix_from_quaternion(*lidar_heading_idx)
             lidar_transform_idx = transformations.calc_transform_matrix(
