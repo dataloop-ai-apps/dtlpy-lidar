@@ -232,6 +232,8 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
                 camera_updated_position_idx = transformations.translation_vector_from_transform_matrix(
                     transform_matrix=camera_updated_transform_idx
                 )
+
+                # Extracting the updated camera translation and rotation
                 camera_updated_rotation_idx = transformations.rotation_matrix_from_transform_matrix(
                     transform_matrix=camera_updated_transform_idx
                 )
