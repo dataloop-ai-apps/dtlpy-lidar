@@ -1,10 +1,12 @@
 import dtlpy as dl
 import json
-import open3d as o3d
+import os
 import numpy as np
+import open3d as o3d
 from open3d.cpu.pybind.geometry import PointCloud
-import dtlpylidar.utilities.transformations as transformations
 from tqdm import tqdm
+
+import dtlpylidar.utilities.transformations as transformations
 
 
 def extract_dataloop_data(frames_item: dl.Item, frame_num: int):
@@ -41,7 +43,12 @@ def create_open_3d_scene_objects(frames_item: dl.Item, pcd_data: dict, cameras_d
     dataset = frames_item.dataset
 
     # Create PCD open3d object
-    pcd_filepath = dataset.items.get(item_id=pcd_data["lidar"]["lidar_pcd_id"]).download(local_path=".", overwrite=True)
+    data_path = os.path.join(os.getcwd(), "data")
+    os.makedirs(name=data_path, exist_ok=True)
+    pcd_filepath = dataset.items.get(item_id=pcd_data["lidar"]["lidar_pcd_id"]).download(
+        local_path=data_path,
+        overwrite=True
+    )
     pcd = o3d.io.read_point_cloud(filename=pcd_filepath)
 
     # Calculate the Quaternion
