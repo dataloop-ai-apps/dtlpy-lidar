@@ -11,10 +11,10 @@ from dtlpylidar.parser_base import (extrinsic_calibrations, images_and_pcds, cam
                                     lidar_scene)
 from dtlpylidar.utilities import transformations
 
-logger = logging.Logger(name="advanced_base_parser")
+logger = logging.Logger(name="custom_base_parser")
 
 
-class AdvancedBaseParser(dl.BaseServiceRunner):
+class CustomBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
     @staticmethod
     def download_data(dataset: dl.Dataset, remote_path: str, download_path: str) -> tuple:
