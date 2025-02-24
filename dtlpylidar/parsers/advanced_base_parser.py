@@ -54,12 +54,6 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
         lidar_json_path = os.path.join(json_path, "lidar")
         lidar_items_path = os.path.join(items_path, "lidar")
 
-        # NOTE: Not supported
-        # # Opening the poses.json file to get the Extrinsic (Translation and Rotation) of the Lidar Scene per frame
-        # poses_json = os.path.join(lidar_items_path, "poses.json")
-        # with open(poses_json, 'r') as f:
-        #     poses_json_data: list = json.load(f)
-
         # Opening the poses.json file to get the Timestamps of the Lidar Scene per frame
         timestamps_json = os.path.join(lidar_items_path, "timestamps.json")
         with open(timestamps_json, 'r') as f:
@@ -75,19 +69,6 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
 
             ground_map_id = lidar_json_data.get("metadata", dict()).get("user", dict()).get(
                 "lidar_ground_detection", dict()).get("groundMapId", None)
-
-            # NOTE: Not supported
-            # lidar_translation = extrinsic_calibrations.Translation(
-            #     x=poses_json_data[lidar_frame_idx].get("position", dict()).get("x", 0),
-            #     y=poses_json_data[lidar_frame_idx].get("position", dict()).get("y", 0),
-            #     z=poses_json_data[lidar_frame_idx].get("position", dict()).get("z", 0),
-            # )
-            # lidar_rotation = extrinsic_calibrations.QuaternionRotation(
-            #     x=poses_json_data[lidar_frame_idx].get("heading", dict()).get("x", 0),
-            #     y=poses_json_data[lidar_frame_idx].get("heading", dict()).get("y", 0),
-            #     z=poses_json_data[lidar_frame_idx].get("heading", dict()).get("z", 0),
-            #     w=poses_json_data[lidar_frame_idx].get("heading", dict()).get("w", 1)
-            # )
 
             lidar_translation = extrinsic_calibrations.Translation(x=0, y=0, z=0)
             lidar_rotation = extrinsic_calibrations.QuaternionRotation(x=0, y=0, z=0, w=1)
@@ -194,19 +175,6 @@ class AdvancedBaseParser(dl.BaseServiceRunner):
                     cx=intrinsics_json_data.get("cx", 0),
                     cy=intrinsics_json_data.get("cy", 0)
                 )
-
-                # NOTE: Not supported
-                # camera_translation = extrinsic_calibrations.Translation(
-                #     x=poses_json_data[camera_frame_idx].get("position", dict()).get("x", 0),
-                #     y=poses_json_data[camera_frame_idx].get("position", dict()).get("y", 0),
-                #     z=poses_json_data[camera_frame_idx].get("position", dict()).get("z", 0)
-                # )
-                # camera_rotation = extrinsic_calibrations.QuaternionRotation(
-                #     x=poses_json_data[camera_frame_idx].get("heading", dict()).get("x", 0),
-                #     y=poses_json_data[camera_frame_idx].get("heading", dict()).get("y", 0),
-                #     z=poses_json_data[camera_frame_idx].get("heading", dict()).get("z", 0),
-                #     w=poses_json_data[camera_frame_idx].get("heading", dict()).get("w", 1)
-                # )
 
                 # Get lidar transform for the current camera frame
                 lidar_transform_idx = lidar_transform_list[camera_frame_idx]
