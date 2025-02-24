@@ -330,8 +330,8 @@ class CustomBaseParser(dl.BaseServiceRunner):
 
 
 def run_parser():
-    dataset = dl.datasets.get(dataset_id="6796249cee0196de840650ef")
-    parser = AdvancedBaseParser()
+    dataset = dl.datasets.get(dataset_id="")
+    parser = CustomBaseParser()
     frames_item = parser.run(dataset=dataset, remote_path="/001")
     # frames_item.open_in_web()
     print(frames_item)
