@@ -158,9 +158,8 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.dataset = mapping_item.dataset
         uid = str(uuid.uuid4())
         base_dataset_name = self.dataset.name
-        base_path = "{}_{}".format(base_dataset_name, uid)
+        items_download_path = os.path.join(os.getcwd(), f"{base_dataset_name}_{uid}".lstrip('/\\'))
         try:
-            items_download_path = os.path.join(os.getcwd(), base_path.lstrip('/\\'))
             self.dataset.download_annotations(local_path=items_download_path)
             self.jsons_path = os.path.join(items_download_path, "json")
             frames_item = self.parse_lidar_data(mapping_item=mapping_item)
