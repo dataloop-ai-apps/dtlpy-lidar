@@ -318,3 +318,6 @@ artifacts
 
 .idea
 .vscode
+
+data
+*frames.json

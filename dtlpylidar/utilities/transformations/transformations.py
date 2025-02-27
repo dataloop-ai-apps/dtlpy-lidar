@@ -5,29 +5,31 @@ from dtlpylidar.parser_base.extrinsic_calibrations import Translation, Quaternio
 import math
 
 
-def rotation_matrix_from_euler(rotation_x, rotation_y, rotation_z, degrees: bool = False):
+def rotation_matrix_from_euler(rotation_x=0.0, rotation_y=0.0, rotation_z=0.0, degrees: bool = False, seq: str = "xyz"):
     """
     Calculate rotation matrix from euler angles (x,y,z)
     :param rotation_x: number
     :param rotation_y: number
     :param rotation_z: number
     :param degrees: True for Degree rotations, False for Radian rotations.
+    :param seq: Euler angles sequence
     :return: 3x3 rotation matrix
     """
-    return R.from_euler(seq='xyz', angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_matrix()
+    return R.from_euler(seq=seq, angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_matrix()
 
 
-def euler_from_rotation_matrix(rotation_matrix, degrees: bool = False):
+def euler_from_rotation_matrix(rotation_matrix=np.identity(3), degrees: bool = False, seq: str = "xyz"):
     """
     Calculate euler angles (x,y,z) from rotation matrix
     :param rotation_matrix: 3x3 rotation matrix
     :param degrees: True for Degree euler angles, False for Radian euler angles.
+    :param seq: Euler angles sequence
     :return: 3x1 euler angles vector
     """
-    return R.from_matrix(rotation_matrix).as_euler(seq='xyz', degrees=degrees)
+    return R.from_matrix(rotation_matrix).as_euler(seq=seq, degrees=degrees)
 
 
-def rotation_matrix_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w):
+def rotation_matrix_from_quaternion(quaternion_x=0.0, quaternion_y=0.0, quaternion_z=0.0, quaternion_w=1.0):
     """
     Calculate rotation matrix from quaternion angles (x,y,z,w)
     :param quaternion_x: number
@@ -39,7 +41,7 @@ def rotation_matrix_from_quaternion(quaternion_x, quaternion_y, quaternion_z, qu
     return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_matrix()
 
 
-def quaternion_from_rotation_matrix(rotation_matrix):
+def quaternion_from_rotation_matrix(rotation_matrix=np.identity(3)):
     """
     Calculate quaternion angles (x,y,z,w) from rotation matrix
     :param rotation_matrix: 3x3 rotation matrix
@@ -48,7 +50,8 @@ def quaternion_from_rotation_matrix(rotation_matrix):
     return R.from_matrix(rotation_matrix).as_quat()
 
 
-def euler_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w, degrees: bool = False):
+def euler_from_quaternion(quaternion_x=0.0, quaternion_y=0.0, quaternion_z=0.0, quaternion_w=1.0,
+                          degrees: bool = False, seq: str = "xyz"):
     """
     Calculate euler angles (x,y,z) from quaternion angles (x,y,z,w)
     :param quaternion_x: number
@@ -56,24 +59,26 @@ def euler_from_quaternion(quaternion_x, quaternion_y, quaternion_z, quaternion_w
     :param quaternion_z: number
     :param quaternion_w: number
     :param degrees: True for Degree euler angles, False for Radian euler angles.
+    :param seq: Euler angles sequence
     :return: 3x1 euler angles vector
     """
-    return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_euler(seq='xyz', degrees=degrees)
+    return R.from_quat([quaternion_x, quaternion_y, quaternion_z, quaternion_w]).as_euler(seq=seq, degrees=degrees)
 
 
-def quaternion_from_euler(rotation_x, rotation_y, rotation_z, degrees: bool = False):
+def quaternion_from_euler(rotation_x=0.0, rotation_y=0.0, rotation_z=0.0, degrees: bool = False, seq: str = "xyz"):
     """
     Calculate quaternion angles (x,y,z,w) from euler angles (x,y,z)
     :param rotation_x: number
     :param rotation_y: number
     :param rotation_z: number
     :param degrees: True for Degree rotations, False for Radian rotations.
+    :param seq: Euler angles sequence
     :return: 4x1 quaternion angles vector
     """
-    return R.from_euler(seq='xyz', angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_quat()
+    return R.from_euler(seq=seq, angles=[rotation_x, rotation_y, rotation_z], degrees=degrees).as_quat()
 
 
-def translation_vector_from_transform_matrix(transform_matrix):
+def translation_vector_from_transform_matrix(transform_matrix=np.identity(4)):
     """
     Extract position (x,y,z) from transform matrix
     :param transform_matrix: 4x4 transform matrix
@@ -82,7 +87,7 @@ def translation_vector_from_transform_matrix(transform_matrix):
     return transform_matrix[0: 3, 3]
 
 
-def rotation_matrix_from_transform_matrix(transform_matrix):
+def rotation_matrix_from_transform_matrix(transform_matrix=np.identity(4)):
     """
     Extract rotation matrix from transform matrix
     :param transform_matrix: 4x4 transform matrix
@@ -146,7 +151,7 @@ def calc_rotation_matrix(theta_x=0.0, theta_y=0.0, theta_z=0.0, degrees: bool = 
     return rotation
 
 
-def calc_transform_matrix(rotation=np.identity(n=3), position=np.array([0.0, 0.0, 0.0])):
+def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3)):
     """
     Calculate transform matrix from rotation matrix and position
     :param rotation: 3x3 matrix
@@ -157,6 +162,66 @@ def calc_transform_matrix(rotation=np.identity(n=3), position=np.array([0.0, 0.0
     transform_matrix[0: 3, 0: 3] = rotation
     transform_matrix[0: 3, 3] = position
     return transform_matrix
+
+
+def calc_cuboid_corners(center=np.zeros(3), dimensions=np.ones(3)):
+    """
+    Calculates the 3D coordinates of all eight corners of a cube given its center and dimensions.
+
+    Args:
+        center: A list or numpy array of size 3 representing the center point (x, y, z).
+        dimensions: A list or numpy array of size 3 representing the dimensions (x, y, z) of the cube.
+
+    Returns:
+        A numpy array of size (8, 3) containing the coordinates of all eight corners.
+    """
+
+    # Half dimensions for easier calculations
+    half_dimensions = np.array(dimensions) / 2
+
+    # Create a list of corner offsets relative to the center
+    corner_offsets = [
+        [-1, -1, -1], [+1, -1, -1], [-1, +1, -1], [+1, +1, -1],
+        [-1, -1, +1], [+1, -1, +1], [-1, +1, +1], [+1, +1, +1]
+    ]
+
+    # Convert corner offsets to numpy array
+    corner_offsets = np.array(corner_offsets)
+
+    # Calculate corner positions by adding offsets to center and multiplying by half dimensions
+    cuboid_corners = center + corner_offsets * half_dimensions
+    return cuboid_corners
+
+
+def fix_cuboid_directions(cuboid_corners: np.ndarray, cuboid_rotation_matrix=np.identity(3),
+                          scene_position=np.zeros(3), scene_rotation_matrix=np.identity(3)):
+    scene_transformation_matrix = calc_transform_matrix(
+        rotation=scene_rotation_matrix,
+        position=scene_position
+    )
+    v3d = o3d.utility.Vector3dVector(cuboid_corners)
+    cloud = o3d.geometry.PointCloud(v3d)
+    cloud.transform(scene_transformation_matrix)
+    new_cuboid_rotation = np.dot(scene_rotation_matrix, cuboid_rotation_matrix)
+    new_cuboid_position = cloud.get_center() - scene_position
+    return new_cuboid_position, new_cuboid_rotation
+
+
+def calc_cuboid_scene_transform_matrix(cuboid_position=np.zeros(3), cuboid_quaternion=np.asarray([0.0, 0.0, 0.0, 1.0]),
+                                       cuboid_scale=np.ones(3),
+                                       scene_position=np.zeros(3), scene_quaternion=np.asarray([0.0, 0.0, 0.0, 1.0])):
+    cuboid_rotation_matrix = rotation_matrix_from_quaternion(*cuboid_quaternion)
+    cuboid_corners = calc_cuboid_corners(center=cuboid_position, dimensions=cuboid_scale)
+    scene_rotation_matrix = rotation_matrix_from_quaternion(*scene_quaternion)
+
+    new_cuboid_position, new_cuboid_rotation = fix_cuboid_directions(
+        cuboid_corners=cuboid_corners,
+        cuboid_rotation_matrix=cuboid_rotation_matrix,
+        scene_position=scene_position,
+        scene_rotation_matrix=scene_rotation_matrix,
+    )
+    new_cuboid_transform_matrix = calc_transform_matrix(rotation=new_cuboid_rotation, position=new_cuboid_position)
+    return new_cuboid_transform_matrix
 
 
 def translate_point_cloud(points, translation: Translation):
@@ -256,12 +321,16 @@ def calc_cube_points(annotation_translation, annotation_scale, annotation_rotati
         rotation_matrix = rotation_matrix_from_euler(
             rotation_x=rotation_x,
             rotation_y=rotation_y,
-            rotation_z=rotation_z)
+            rotation_z=rotation_z
+        )
         translation_matrix = calc_translation_matrix(
             position_x=position_x,
             position_y=position_y,
-            position_z=position_z)
-        cube = rotate_annotation_cube3d(annotation_corners=cube,
-                                        rotation_matrix=rotation_matrix,
-                                        translation_matrix=translation_matrix)
+            position_z=position_z
+        )
+        cube = rotate_annotation_cube3d(
+            annotation_corners=cube,
+            rotation_matrix=rotation_matrix,
+            translation_matrix=translation_matrix
+        )
     return cube
