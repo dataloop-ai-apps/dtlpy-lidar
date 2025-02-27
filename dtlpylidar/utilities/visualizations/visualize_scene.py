@@ -1,8 +1,11 @@
 import dtlpy as dl
 import json
-import open3d as o3d
+import os
 import numpy as np
+import open3d as o3d
 from open3d.cpu.pybind.geometry import PointCloud
+from tqdm import tqdm
+
 import dtlpylidar.utilities.transformations as transformations
 
 
@@ -40,7 +43,12 @@ def create_open_3d_scene_objects(frames_item: dl.Item, pcd_data: dict, cameras_d
     dataset = frames_item.dataset
 
     # Create PCD open3d object
-    pcd_filepath = dataset.items.get(item_id=pcd_data["lidar"]["lidar_pcd_id"]).download(local_path=".")
+    data_path = os.path.join(os.getcwd(), "data")
+    os.makedirs(name=data_path, exist_ok=True)
+    pcd_filepath = dataset.items.get(item_id=pcd_data["lidar"]["lidar_pcd_id"]).download(
+        local_path=data_path,
+        overwrite=True
+    )
     pcd = o3d.io.read_point_cloud(filename=pcd_filepath)
 
     # Calculate the Quaternion
@@ -148,7 +156,7 @@ def create_open_3d_annotations_objects(frames_item: dl.Item, frame_num: int):
     labels_map = frames_item.dataset.labels_flat_dict
 
     annotation: dl.Annotation
-    for annotation in annotations:
+    for annotation in tqdm(annotations):
         # Get the updated annotation entity
         annotation = dl.annotations.get(annotation_id=annotation.id)
         if frame_num not in list(annotation.frames.keys()):
@@ -239,7 +247,7 @@ def main():
     frames_item_id = ""
     frame_num = 0
     dark_mode = True
-    rgb_points_color = True
+    rgb_points_color = False
 
     frames_item = dl.items.get(item_id=frames_item_id)
     visualize_in_open_3d(frames_item=frames_item, frame_num=frame_num, dark_mode=dark_mode,

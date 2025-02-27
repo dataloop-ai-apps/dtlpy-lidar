@@ -1,5 +1,3 @@
-from dtlpylidar.parser_base import extrinsic_calibrations
-from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
 import os
 import dtlpy as dl
 import json
@@ -7,6 +5,9 @@ from io import BytesIO
 import uuid
 import logging
 import shutil
+
+from dtlpylidar.parser_base import (extrinsic_calibrations, images_and_pcds, camera_calibrations, lidar_frame,
+                                    lidar_scene)
 
 logger = logging.Logger(name="file_mapping_parser")
 
@@ -18,7 +19,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.jsons_path = ""
         self.absolute_path_search = True
 
-    def parse_lidar_data(self, mapping_item: dl.Item):
+    def parse_lidar_data(self, mapping_item: dl.Item) -> dl.Item:
         scene = lidar_scene.LidarScene()
         frames = self.mapping_data.get("frames", dict())
         for frame_num, frame_details in frames.items():
@@ -147,7 +148,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         )
         return frames_item
 
-    def parse_data(self, mapping_item: dl.Item):
+    def parse_data(self, mapping_item: dl.Item) -> dl.Item:
         if "json" not in mapping_item.metadata.get("system", dict()).get("mimetype"):
             raise Exception("Expected item of type json")
 
@@ -157,14 +158,13 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.dataset = mapping_item.dataset
         uid = str(uuid.uuid4())
         base_dataset_name = self.dataset.name
-        base_path = "{}_{}".format(base_dataset_name, uid)
+        items_download_path = os.path.join(os.getcwd(), f"{base_dataset_name}_{uid}".lstrip('/\\'))
         try:
-            items_download_path = os.path.join(os.getcwd(), base_path.lstrip('/\\'))
             self.dataset.download_annotations(local_path=items_download_path)
             self.jsons_path = os.path.join(items_download_path, "json")
             frames_item = self.parse_lidar_data(mapping_item=mapping_item)
         finally:
-            shutil.rmtree(base_path, ignore_errors=True)
+            shutil.rmtree(items_download_path, ignore_errors=True)
         return frames_item
 
 
