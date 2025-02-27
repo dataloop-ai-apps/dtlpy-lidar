@@ -35,7 +35,7 @@ And now you are ready to use the package!
 ## Quick Start
 
 After Setting up the data as described in
-the [LiDAR Data setup](https://docs.dataloop.ai/docs/lidar-data-setup?highlight=lidar) documentation, you can run the
+the [LiDAR Data setup](https://docs.dataloop.ai/docs/lidar-data-setup) documentation, you can run the
 following script to create the LiDAR video file.
 Run the following script to create the LiDAR video file.
 
@@ -79,7 +79,8 @@ LiDAR data on the Dataloop platform.
 
 **Pre-processing:**
 
-* [Dataloop Base Parser](dtlpylidar/parsers/PARSERS_README.md) - The base parser to create a LiDAR video file.
+* [Dataloop Base Parser](dtlpylidar/parsers/PARSERS_README.md) - The base parser to create a LiDAR video file, from a `mapping.json` file.
+* [Custom Base Parser](dtlpylidar/parsers/custom_base_parser.py) - The custom parser to create a LiDAR video file, from for any directory structure of a LiDAR scene.
 
 
 **Utilities:**
