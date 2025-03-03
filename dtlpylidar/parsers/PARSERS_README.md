@@ -1,6 +1,6 @@
-# Dtlpy Lidar Parsers
+# Dtlpy LiDAR Parsers
 
-## Base Parser
+## [Base Parser](base_parser.py)
 
 ### Description:
 
@@ -32,3 +32,13 @@ mapping_item = dataset.items.get(item_id="<mapping.json item id>")
 frames_item = LidarFileMappingParser().parse_data(mapping_item=mapping_item)
 frames_item.open_in_web()
 ```
+
+
+## [Custom Base Parser](custom_base_parser.py)
+
+### Description:
+
+Custom LiDAR parser is a script that set up a LiDAR scene dataset on the Dataloop platform for any directory structure of a LiDAR scene.
+
+See [Using Custom LiDAR Parser](https://developers.dataloop.ai/tutorials/data_management/items_and_annotations/other_data_types/lidar/chapter#using-custom-lidar-parser)
+for more information.
