@@ -168,13 +168,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param annotation: original annotation
         :return: None
         """
+        cameras_map = {camera.get('id'): camera for camera in cameras}
+
         # iterate over images that correspond with frame
         for idx, image_calibrations in enumerate(images):
             # get image and camera calibrations
             item_id = image_calibrations.get('image_id')
             item = dl.items.get(item_id=item_id)
             camera_id = image_calibrations.get('camera_id')
-            camera_calibrations = cameras[int(camera_id)]
+            camera_calibrations = cameras_map.get(camera_id)
             # apply camera projection
             projection = self.apply_camera_projection(points=np.copy(points),
                                                       camera_calibrations=camera_calibrations)
@@ -197,7 +199,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     lidar_video_content, camera_calibrations, frame_num):
         """
         Calculate frame annotations.
-        :param annotation: original annotaiton
+        :param annotation: original annotation
         :param annotation_translation: original annotation translation
         :param annotation_rotation: original annotation rotation
         :param annotation_scale: original annotation scale
