@@ -80,7 +80,7 @@ LiDAR data on the Dataloop platform.
 **Pre-processing:**
 
 * [Dataloop Base Parser](dtlpylidar/parsers/PARSERS_README.md) - The base parser to create a LiDAR video file, from a `mapping.json` file.
-* [Custom Base Parser](dtlpylidar/parsers/custom_base_parser.py) - The custom parser to create a LiDAR video file, from for any directory structure of a LiDAR scene.
+* [Custom Base Parser](dtlpylidar/parsers/custom_base_parser.py) - The custom parser to create a LiDAR video file, from any directory structure of a LiDAR scene.
 
 
 **Utilities:**
