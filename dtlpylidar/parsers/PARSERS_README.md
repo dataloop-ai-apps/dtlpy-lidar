@@ -7,9 +7,9 @@
 Dataloop LiDAR parser is a script that takes a dataset with raw LiDAR data and creates a LiDAR video file.
 The LiDAR video file is a collection of:
 
-* PCDs
-* Image from multiple camera sources
-* Calibrations data
+- **PCD files:** The point cloud data of the 3D scenes.
+- **JPEG/PNG files:** The 2D images of the available camera sources.
+- **Calibration data:** The calibration data of the LiDAR sensor and the camera sources.
 
 Each frame in the LiDAR video file is composed of a single instance of each one of the different sensors combined along
 with their calibrations.
