@@ -1,15 +1,15 @@
-# Dtlpy Lidar Parsers
+# Dtlpy LiDAR Parsers
 
-## Base Parser
+## [Base Parser](base_parser.py)
 
 ### Description:
 
 Dataloop LiDAR parser is a script that takes a dataset with raw LiDAR data and creates a LiDAR video file.
 The LiDAR video file is a collection of:
 
-* PCDs
-* Image from multiple cameras
-* Calibrations data
+- **PCD files:** The point cloud data of the 3D scenes.
+- **JPEG/PNG files:** The 2D images of the available camera sources.
+- **Calibration data:** The calibration data of the LiDAR sensor and the camera sources.
 
 Each frame in the LiDAR video file is composed of a single instance of each one of the different sensors combined along
 with their calibrations.
@@ -17,19 +17,28 @@ with their calibrations.
 ### Pre-requisites:
 
 To start working with our base LiDAR parser, you need to follow the data setup as described in the following link
-[LIDAR Data Setup](https://docs.dataloop.ai/docs/lidar-data-setup?highlight=lidar).
+[LiDAR Data Setup](https://docs.dataloop.ai/docs/lidar-data-setup).
 
 ### How to run:
 
-Once the data is set up, and the `mapping.json` file is uploaded to the platform, you can run the following script to
-create the LiDAR video file.
+Once all files are ready, and the `mapping.json` file is uploaded to the platform, to create the LiDAR video file (of all the PCD files stitched together), run the following script:
 
 ```python
 import dtlpy as dl
 from dtlpylidar.parsers.base_parser import LidarFileMappingParser
 
-dataset = dl.datasets.get(dataset_id='dataset-id')
+dataset = dl.datasets.get(dataset_id="<dataset id>")
 mapping_item = dataset.items.get(item_id="<mapping.json item id>")
 frames_item = LidarFileMappingParser().parse_data(mapping_item=mapping_item)
 frames_item.open_in_web()
 ```
+
+
+## [Custom Base Parser](custom_base_parser.py)
+
+### Description:
+
+Custom LiDAR parser is a script that creates a LiDAR video file, from any directory structure of a LiDAR scene.
+
+For more information see [Using Custom LiDAR Parser](https://developers.dataloop.ai/tutorials/data_management/items_and_annotations/other_data_types/lidar/chapter#using-custom-lidar-parser).
+
