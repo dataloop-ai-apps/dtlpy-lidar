@@ -34,8 +34,8 @@ And now you are ready to use the package!
 
 ## Quick Start
 
-After Setting up the data as described in
-the [LiDAR Data setup](https://docs.dataloop.ai/docs/lidar-data-setup) documentation, you can run the
+After setting up the data as described in
+the [LiDAR Data Setup](https://docs.dataloop.ai/docs/lidar-data-setup) documentation, you can run the
 following script to create the LiDAR video file.
 Run the following script to create the LiDAR video file.
 

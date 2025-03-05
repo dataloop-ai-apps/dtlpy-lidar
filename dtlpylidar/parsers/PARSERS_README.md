@@ -38,7 +38,7 @@ frames_item.open_in_web()
 
 ### Description:
 
-Custom LiDAR parser is a script that create a LiDAR video file, from any directory structure of a LiDAR scene.
+Custom LiDAR parser is a script that creates a LiDAR video file, from any directory structure of a LiDAR scene.
 
 For more information see [Using Custom LiDAR Parser](https://developers.dataloop.ai/tutorials/data_management/items_and_annotations/other_data_types/lidar/chapter#using-custom-lidar-parser).
 
