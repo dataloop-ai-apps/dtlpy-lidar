@@ -1,5 +1,3 @@
-from dtlpylidar.parser_base import extrinsic_calibrations
-from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
 import os
 import dtlpy as dl
 import json
@@ -7,6 +5,9 @@ from io import BytesIO
 import uuid
 import logging
 import shutil
+
+from dtlpylidar.parser_base import (extrinsic_calibrations, images_and_pcds, camera_calibrations, lidar_frame,
+                                    lidar_scene)
 
 logger = logging.Logger(name="file_mapping_parser")
 
@@ -18,12 +19,18 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.jsons_path = ""
         self.absolute_path_search = True
 
-    def parse_lidar_data(self, mapping_item: dl.Item):
+    def parse_lidar_data(self, mapping_item: dl.Item) -> dl.Item:
         scene = lidar_scene.LidarScene()
         frames = self.mapping_data.get("frames", dict())
         for frame_num, frame_details in frames.items():
             logger.info(f"Search PCD {frame_num}")
-            pcd_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], frame_details.get("path"))
+            if frame_details.get("path").startswith("/"):
+                pcd_filepath = os.path.join(self.jsons_path,
+                                            frame_details.get("path").lstrip('/'))
+            else:
+                pcd_filepath = os.path.join(self.jsons_path,
+                                            mapping_item.dir.lstrip('/'),
+                                            frame_details.get("path"))
             pcd_filepath = pcd_filepath.replace(".pcd", ".json")
             with open(pcd_filepath, 'r') as f:
                 pcd_json = json.load(f)
@@ -57,7 +64,14 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
             frame_images = frame_details.get("images", list())
             for image_num, image_details in frame_images.items():
                 logger.info(f"Search image {image_num} for frame {frame_num}")
-                image_filepath = os.path.join(self.jsons_path, mapping_item.dir[1:], image_details.get("image_path"))
+                if image_details.get("image_path").startswith("/"):
+                    image_filepath = os.path.join(self.jsons_path,
+                                                  image_details.get("image_path").lstrip('/'))
+                else:
+                    image_filepath = os.path.join(self.jsons_path,
+                                                  mapping_item.dir.lstrip('/'),
+                                                  image_details.get("image_path"))
+
                 image_ext = os.path.splitext(image_filepath)[1]
                 image_filepath = image_filepath.replace(image_ext, ".json")
                 with open(image_filepath, 'r') as f:
@@ -134,7 +148,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         )
         return frames_item
 
-    def parse_data(self, mapping_item: dl.Item):
+    def parse_data(self, mapping_item: dl.Item) -> dl.Item:
         if "json" not in mapping_item.metadata.get("system", dict()).get("mimetype"):
             raise Exception("Expected item of type json")
 
@@ -144,20 +158,18 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.dataset = mapping_item.dataset
         uid = str(uuid.uuid4())
         base_dataset_name = self.dataset.name
-        base_path = "{}_{}".format(base_dataset_name, uid)
+        items_download_path = os.path.join(os.getcwd(), f"{base_dataset_name}_{uid}".lstrip('/\\'))
         try:
-            items_download_path = os.path.join(os.getcwd(), base_path)
             self.dataset.download_annotations(local_path=items_download_path)
             self.jsons_path = os.path.join(items_download_path, "json")
             frames_item = self.parse_lidar_data(mapping_item=mapping_item)
         finally:
-            shutil.rmtree(base_path, ignore_errors=True)
+            shutil.rmtree(items_download_path, ignore_errors=True)
         return frames_item
 
 
 def test_parse_data():
     item_id = "<mapping-item-id>"
-
     parser = LidarFileMappingParser()
     mapping_item = dl.items.get(item_id=item_id)
     print(parser.parse_data(mapping_item=mapping_item))

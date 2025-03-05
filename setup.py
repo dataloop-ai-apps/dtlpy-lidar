@@ -9,7 +9,7 @@
 
 from setuptools import setup, find_packages
 
-with open('README.MD', encoding="utf8") as f:
+with open('README.md', encoding="utf8") as f:
     readme = f.read()
 
 with open('requirements.txt') as f:
@@ -25,7 +25,7 @@ setup(name='dtlpylidar',
           'Programming Language :: Python :: 3.8',
           'Programming Language :: Python :: 3.9',
       ],
-      version='0.0.1',
+      version='0.0.3',
       description='Lidar app',
       author='Dataloop Team',
       author_email='shadi.m@dataloop.ai',
