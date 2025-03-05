@@ -27,7 +27,7 @@ Once all files are ready, and the `mapping.json` file is uploaded to the platfor
 import dtlpy as dl
 from dtlpylidar.parsers.base_parser import LidarFileMappingParser
 
-dataset = dl.datasets.get(dataset_id='dataset-id')
+dataset = dl.datasets.get(dataset_id="<dataset id>")
 mapping_item = dataset.items.get(item_id="<mapping.json item id>")
 frames_item = LidarFileMappingParser().parse_data(mapping_item=mapping_item)
 frames_item.open_in_web()
