@@ -154,7 +154,7 @@ def calc_rotation_matrix(theta_x=0.0, theta_y=0.0, theta_z=0.0, degrees: bool = 
 def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3), seq: str = "xyz"):
     """
     Calculate transform matrix from rotation matrix and position
-    :param rotation: 3x3 - Rotation matrix, 3x1 - Euler angle (with seq) or 4x1 - Quaternion
+    :param rotation: 3x3 - Rotation matrix, 3x1 - Euler angles (with seq) or 4x1 - Quaternion
     :param position: 3x1 - Translation vector
     :param seq: Euler angles sequence
     :return: 4x4 transform matrix
