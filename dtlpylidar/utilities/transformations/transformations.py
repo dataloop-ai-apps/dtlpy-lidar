@@ -151,13 +151,23 @@ def calc_rotation_matrix(theta_x=0.0, theta_y=0.0, theta_z=0.0, degrees: bool = 
     return rotation
 
 
-def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3)):
+def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3), seq: str = "xyz"):
     """
     Calculate transform matrix from rotation matrix and position
-    :param rotation: 3x3 matrix
-    :param position: 3x1 vector
+    :param rotation: 3x3 - Rotation matrix, 3x1 - Euler angle (with seq) or 4x1 - Quaternion
+    :param position: 3x1 - Translation vector
+    :param seq: Euler angles sequence
     :return: 4x4 transform matrix
     """
+    if rotation.shape == (3, 3):  # Rotation matrix
+        pass  # No change needed
+    elif rotation.shape == (3, ):  # Euler angles sequence
+        rotation = rotation_matrix_from_euler(*rotation, seq=seq)
+    elif rotation.shape == (4, ):  # Quaternion
+        rotation = rotation_matrix_from_quaternion(*rotation)
+    else:
+        raise Exception('Shape of rotation matrix is not valid. Must be 3x3, 3x1 or 4x1')
+
     transform_matrix = np.identity(n=4)
     transform_matrix[0: 3, 0: 3] = rotation
     transform_matrix[0: 3, 3] = position
@@ -352,24 +362,49 @@ def scale_point_cloud_data(pcd: o3d.geometry.PointCloud, scale_factor: float):
     pcd.scale(scale_factor, center=pcd.get_center())
 
 
-def calc_cube_points(annotation_translation, annotation_scale, annotation_rotation=None, apply_rotation=True):
+def transform_points(points: np.ndarray, translation: np.ndarray, rotation: np.ndarray):
+    # Step 1: Convert points to homogeneous coordinates (Nx4)
+    ones = np.ones((points.shape[0], 1))
+    points_hom = np.hstack([points, ones])  # Nx4
+
+    # Step 2: Build cube's transformation matrix and apply inverse to move points to cube-local frame
+    transform_matrix = calc_transform_matrix(
+        rotation=rotation,
+        position=translation
+    )
+    transformed_hom = (transform_matrix @ points_hom.T).T  # still Nx4
+    transformed_points = transformed_hom[:, :3]
+    return transformed_points
+
+
+def calc_cube_points(annotation_translation=np.array([0.0, 0.0, 0.0]),
+                     annotation_scale=np.array([1.0, 1.0, 1.0]),
+                     annotation_rotation=np.array([0.0, 0.0, 0.0])):
     """
     Given a 3d cube represented by center point, rotation and scale, calculate the 8 corners of the cube
     :param annotation_translation: Annotation center. [x, y, z]
-    :param annotation_rotation: Annotation rotation. [x, y, z]
     :param annotation_scale: annotation scale along each axis. [x, y, z]
-    :param apply_rotation: Apply rotation to the cube
+    :param annotation_rotation: Annotation rotation. [x, y, z]
     :return:
     """
+    if isinstance(annotation_translation, list):
+        annotation_translation = np.array(annotation_translation)
+    if isinstance(annotation_scale, list):
+        annotation_scale = np.array(annotation_scale)
+    if isinstance(annotation_rotation, list):
+        annotation_rotation = np.array(annotation_rotation)
+
+    # Center of the cube
+    position_x = 0
+    position_y = 0
+    position_z = 0
+
+    # Scale of the cube
     scale_x = annotation_scale[0]
     scale_y = annotation_scale[1]
     scale_z = annotation_scale[2]
 
-    position_x = annotation_translation[0]
-    position_y = annotation_translation[1]
-    position_z = annotation_translation[2]
-
-    cube = np.asarray([
+    cube_points = np.asarray([
         [position_x + scale_x / 2, position_y + scale_y / 2, position_z + scale_z / 2],
         [position_x + scale_x / 2, position_y + scale_y / 2, position_z - scale_z / 2],
         [position_x + scale_x / 2, position_y - scale_y / 2, position_z + scale_z / 2],
@@ -380,25 +415,9 @@ def calc_cube_points(annotation_translation, annotation_scale, annotation_rotati
         [position_x - scale_x / 2, position_y - scale_y / 2, position_z - scale_z / 2],
     ])
 
-    if apply_rotation is True:
-        if annotation_rotation is None:
-            raise Exception("Rotation must be provided")
-        rotation_x = annotation_rotation[0]
-        rotation_y = annotation_rotation[1]
-        rotation_z = annotation_rotation[2]
-        rotation_matrix = rotation_matrix_from_euler(
-            rotation_x=rotation_x,
-            rotation_y=rotation_y,
-            rotation_z=rotation_z
-        )
-        translation_matrix = calc_translation_matrix(
-            position_x=position_x,
-            position_y=position_y,
-            position_z=position_z
-        )
-        cube = rotate_annotation_cube3d(
-            annotation_corners=cube,
-            rotation_matrix=rotation_matrix,
-            translation_matrix=translation_matrix
-        )
-    return cube
+    cube_points = transform_points(
+        points=cube_points,
+        translation=annotation_translation,
+        rotation=annotation_rotation
+    )
+    return cube_points

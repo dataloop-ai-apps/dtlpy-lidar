@@ -180,9 +180,8 @@ def create_open_3d_annotations_objects(frames_item: dl.Item, frame_num: int):
             annotation_definition: dl.Cube3d = annotation.annotation_definition
             cuboid_points = transformations.calc_cube_points(
                 annotation_translation=annotation_definition.position,
-                annotation_rotation=annotation_definition.rotation,
                 annotation_scale=annotation_definition.scale,
-                apply_rotation=True
+                annotation_rotation=annotation_definition.rotation,
             )
 
             # Get Cuboid Lines
