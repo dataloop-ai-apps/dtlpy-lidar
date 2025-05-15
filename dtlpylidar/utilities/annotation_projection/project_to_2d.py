@@ -56,10 +56,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
         """
         Create annotation from 3D cube 8 points projected on 2D image.
         :param annotation_pixels: annotation 3D cube 8 points projected on 2D image.
-        :param annotation:  original annotation
+        :param annotation: original annotation
         :param width: image width
         :param height: image height
-        :return: cube annotation if at least 5 points are inside the image boundaries.
+        :return: cube annotation if at least 2 points are inside the image boundaries.
         """
         # check if at least 2 points are inside the image boundaries
         counter = 0
@@ -123,6 +123,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     lidar_video_content, camera_calibrations, frame_num):
         """
         Calculate frame annotations.
+        Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
         :param annotation: original annotation
         :param annotation_translation: original annotation translation
         :param annotation_rotation: original annotation rotation
@@ -130,7 +131,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param lidar_video_content: lidar scene video as json
         :param camera_calibrations: camera calibrations
         :param frame_num:
-        :return:
+        :return: None
         """
         # calculate 3D cube points from annotation (PCD normalized)
         points = transformations.calc_cuboid_corners(
@@ -287,5 +288,5 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     runner = AnnotationProjection()
     # frames json item ID
-    item = dl.items.get(item_id='68260fce2d980cd7d66f020e')
+    item = dl.items.get(item_id='')
     runner.project_annotations_to_2d(item=item)
