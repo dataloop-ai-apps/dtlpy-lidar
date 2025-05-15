@@ -178,9 +178,10 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         )
         return frames_item
 
-    def parse_data(self, mapping_item: dl.Item, filters: dl.Filters = None) -> dl.Item:
+    def parse_data(self, mapping_item: dl.Item, query: dict = None) -> dl.Item:
         if "json" not in mapping_item.metadata.get("system", dict()).get("mimetype"):
             raise Exception("Expected item of type json")
+        filters = dl.Filters(custom_filter=query)
 
         buffer = mapping_item.download(save_locally=False)
         self.mapping_data = json.loads(buffer.getvalue())
