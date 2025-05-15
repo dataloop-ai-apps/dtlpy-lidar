@@ -33,45 +33,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         return translation, scale, rotation
 
     @staticmethod
-    def apply_camera_projection(points, camera_calibrations):
-        """
-        Apply camera projection on 3D points
-        :param points: 3D cube 8 points
-        :param camera_calibrations: camera calibration dictionary
-        :return: 3D cube 8 points projected on 2D image.
-        """
-        sensors_data = camera_calibrations.get('sensorsData')
-        # intrinsic calibrations
-        fx = sensors_data.get('intrinsicData', dict()).get('fx')
-        fy = sensors_data.get('intrinsicData', dict()).get('fy')
-        s = sensors_data.get('intrinsicData', dict()).get('skew')
-        cx = sensors_data.get('intrinsicData', dict()).get('cx')
-        cy = sensors_data.get('intrinsicData', dict()).get('cy')
-        # intrinsic Matrix
-        intrinsic = np.array([[fx, s, cx],
-                              [0, fy, cy],
-                              [0, 0, 1]])
-
-        # Move the cube to the camera position
-        points += np.array([sensors_data.get('extrinsic', dict()).get('position').get('x'),
-                            sensors_data.get('extrinsic', dict()).get('position').get('y'),
-                            sensors_data.get('extrinsic', dict()).get('position').get('z')])
-        # Rotate the cube to the camera rotation
-        r_box = R.from_quat([sensors_data.get('extrinsic', dict()).get('rotation').get('x'),
-                             sensors_data.get('extrinsic', dict()).get('rotation').get('y'),
-                             sensors_data.get('extrinsic', dict()).get('rotation').get('z'),
-                             sensors_data.get('extrinsic', dict()).get('rotation').get('w')])
-
-        points = np.dot(np.linalg.inv(r_box.as_matrix()), points.transpose()).transpose()
-
-        # Apply camera projection
-        image_pts = np.dot(intrinsic, points.transpose()).transpose()
-        # Normalize image points to 2D
-        norm_image_pts = [pt[:2] / np.abs(pt[2]) for pt in image_pts]
-        # return 3D cube 8 points projected on 2D image.
-        return norm_image_pts
-
-    @staticmethod
     def check_boundaries(width, height, x, y):
         """
         Move point to boundaries if it is outside the image boundaries
@@ -100,18 +61,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param height: image height
         :return: cube annotation if at least 5 points are inside the image boundaries.
         """
+        # check if at least 2 points are inside the image boundaries
         counter = 0
-        # check if at least 5 points are inside the image boundaries
+        min_threshold = 2
         for annotation_corner in annotation_pixels:
-            if annotation_corner[0] < 0 or annotation_corner[0] > height:
+            if (0 < annotation_corner[0] < width) and (0 < annotation_corner[1] < height):
                 counter += 1
-                continue
-            if annotation_corner[1] < 0 or annotation_corner[1] > width:
-                counter += 1
-                continue
-        # if at least 5 points are inside the image boundaries create annotation
-        if counter >= 5:
-            return
+
+        # if not enough points are inside the image boundaries skip annotation creation
+        if not (counter >= min_threshold):
+            return None
+
         # move points to boundaries if they are outside the image boundaries
         front_tl = self.check_boundaries(width=width,
                                          height=height,
@@ -159,42 +119,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # return cube annotation
         return cube
 
-    def iterate_image(self, cameras, images, points, annotation):
-        """
-        Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
-        :param cameras: all cameras calibrations of relevant frame
-        :param images: all images of relevant frame
-        :param points: 3D cube 8 points
-        :param annotation: original annotation
-        :return: None
-        """
-        cameras_map = {camera.get('id'): camera for camera in cameras}
-
-        # iterate over images that correspond with frame
-        for idx, image_calibrations in enumerate(images):
-            # get image and camera calibrations
-            item_id = image_calibrations.get('image_id')
-            item = dl.items.get(item_id=item_id)
-            camera_id = image_calibrations.get('camera_id')
-            camera_calibrations = cameras_map.get(camera_id)
-            # apply camera projection
-            projection = self.apply_camera_projection(points=np.copy(points),
-                                                      camera_calibrations=camera_calibrations)
-            # create cube annotation if it is inside the image boundaries
-            cube_annotation = self.create_annotation(annotation_pixels=projection, annotation=annotation,
-                                                     width=item.width,
-                                                     height=item.height)
-            # if cube annotation is not None add it to the item
-            if cube_annotation is None:
-                continue
-            # create annotation builder
-            builder = item.annotations.builder()
-            # add annotation to the item
-            builder.add(annotation_definition=cube_annotation,
-                        object_id=annotation.object_id)
-            # upload annotation to the item
-            item.annotations.upload(builder)
-
     def calculate_frame_annotations(self, annotation, annotation_translation, annotation_rotation, annotation_scale,
                                     lidar_video_content, camera_calibrations, frame_num):
         """
@@ -208,19 +132,85 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param frame_num:
         :return:
         """
-        # calculate 3D cube points from annotation
-        points = transformations.calc_cube_points(annotation_translation=annotation_translation,
-                                                  annotation_rotation=annotation_rotation,
-                                                  annotation_scale=annotation_scale,
-                                                  apply_rotation=True)
+        # calculate 3D cube points from annotation (PCD normalized)
+        points = transformations.calc_cuboid_corners(
+            dimensions=annotation_scale
+        )
+        model_matrix = transformations.calc_transform_matrix(
+            rotation=annotation_rotation,
+            position=annotation_translation
+        )
+
         # get all images of relevant frame
         frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
         # iterate over images that correspond with frame and create cube annotation for each image if it is inside
         # the image boundaries
-        self.iterate_image(cameras=camera_calibrations,
-                           images=frame_images,
-                           points=points,
-                           annotation=annotation)
+        cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
+
+        # iterate over images that correspond with frame
+        for idx, image_calibrations in enumerate(frame_images):
+            # get image and camera calibrations
+            item_id = image_calibrations.get('image_id')
+            item = dl.items.get(item_id=item_id)
+            camera_id = image_calibrations.get('camera_id')
+            camera_calibrations = cameras_map.get(camera_id)
+            sensors_data = camera_calibrations.get('sensorsData')
+
+            # calculate view matrix (Default values: Center of the camera is at (0,0,0))
+            camera_rotation = sensors_data.get('extrinsic', dict()).get('rotation')
+            camera_rotation = [
+                camera_rotation.get('x', 0.0),
+                camera_rotation.get('y', 0.0),
+                camera_rotation.get('z', 0.0),
+                camera_rotation.get('w', 1.0)
+            ]
+            camera_translation = sensors_data.get('extrinsic', dict()).get('position')
+            camera_translation = [
+                camera_translation.get('x', 0.0),
+                camera_translation.get('y', 0.0),
+                camera_translation.get('z', 0.0)
+            ]
+            view_matrix = transformations.calc_transform_matrix(
+                rotation=camera_rotation,
+                position=camera_translation
+            )
+            view_matrix = np.linalg.inv(view_matrix)  # inverse of the view matrix (camera to world space)
+
+            # calculate projection matrix (Default values: Orthographic projection)
+            intrinsic_data = sensors_data.get('intrinsicData', dict())
+            fx = intrinsic_data.get('fx', 1.0)
+            fy = intrinsic_data.get('fy', 1.0)
+            s = intrinsic_data.get('skew', 0.0)
+            cx = intrinsic_data.get('cx', 0.0)
+            cy = intrinsic_data.get('cy', 0.0)
+            projection_matrix = np.array([
+                [fx, s , cx, 0],
+                [0 , fy, cy, 0],
+                [0 , 0 , 1 , 0],
+                [0 , 0 , 0 , 1]
+            ])
+
+            mvp = projection_matrix @ view_matrix @ model_matrix
+            points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+            projected_points = (mvp @ points_homogeneous.T).T  # (N, 4)
+            projected_pixels = projected_points[:, :2] / np.abs(projected_points[:, 2:3])  # (N, 2)
+
+            # create cube annotation if it is inside the image boundaries
+            cube_annotation = self.create_annotation(
+                annotation_pixels=projected_pixels,
+                annotation=annotation,
+                width=item.width,
+                height=item.height
+            )
+            # if cube annotation is not None add it to the item
+            if cube_annotation is None:
+                continue
+            # create annotation builder
+            builder = item.annotations.builder()
+            # add annotation to the item
+            builder.add(annotation_definition=cube_annotation, object_id=annotation.object_id)
+            # upload annotation to the item
+            item.annotations.upload(builder)
 
     def project_annotations_to_2d(self, item: dl.Item):
         """
@@ -297,5 +287,5 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     runner = AnnotationProjection()
     # frames json item ID
-    item = dl.items.get(item_id='')
+    item = dl.items.get(item_id='68260fce2d980cd7d66f020e')
     runner.project_annotations_to_2d(item=item)
