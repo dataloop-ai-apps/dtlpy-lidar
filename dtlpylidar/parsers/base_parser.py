@@ -19,36 +19,35 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.jsons_path = ""
 
     def download_mapping_items(self, mapping_item, items_download_path, filters=None):
-        # Option 1
-        # item_filenames = []
-        # frames = self.mapping_data.get("frames", dict())
-        # for frame_num, frame_details in frames.items():
-        #     if frame_details.get("path").startswith("/"):
-        #         pcd_filename = frame_details.get('path')
-        #     else:
-        #         pcd_filename = f"{mapping_item.dir}/{frame_details.get('path')}"
-        #     item_filenames.append(pcd_filename)
-        #
-        #     frame_images = frame_details.get("images", list())
-        #     for image_num, image_details in frame_images.items():
-        #         if image_details.get("image_path").startswith("/"):
-        #             image_filename = image_details.get("image_path")
-        #         else:
-        #             image_filename = f"{mapping_item.dir}/{image_details.get('image_path')}"
-        #         item_filenames.append(image_filename)
-        #
-        # filters = dl.Filters()
-        # filters.add(field=dl.FiltersKnownFields.FILENAME, values=item_filenames, operator=dl.FiltersOperations.IN)
-        # self.dataset.download_annotations(
-        #     local_path=items_download_path,
-        #     filters=filters
-        # )
+        if filters is not None:
+            self.dataset.download_annotations(
+                local_path=items_download_path,
+                filters=filters
+            )
+        else:  # By default, download only the jsons of the items specified in the mapping data
+            item_filenames = []
+            frames = self.mapping_data.get("frames", dict())
+            for frame_num, frame_details in frames.items():
+                if frame_details.get("path").startswith("/"):
+                    pcd_filename = frame_details.get('path')
+                else:
+                    pcd_filename = f"{mapping_item.dir}/{frame_details.get('path')}"
+                item_filenames.append(pcd_filename)
 
-        # Option 2
-        self.dataset.download_annotations(
-            local_path=items_download_path,
-            filters=filters
-        )
+                frame_images = frame_details.get("images", list())
+                for image_num, image_details in frame_images.items():
+                    if image_details.get("image_path").startswith("/"):
+                        image_filename = image_details.get("image_path")
+                    else:
+                        image_filename = f"{mapping_item.dir}/{image_details.get('image_path')}"
+                    item_filenames.append(image_filename)
+
+            filters = dl.Filters()
+            filters.add(field=dl.FiltersKnownFields.FILENAME, values=item_filenames, operator=dl.FiltersOperations.IN)
+            self.dataset.download_annotations(
+                local_path=items_download_path,
+                filters=filters
+            )
 
     def parse_lidar_data(self, mapping_item: dl.Item) -> dl.Item:
         scene = lidar_scene.LidarScene()
@@ -191,7 +190,11 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         base_dataset_name = self.dataset.name
         items_download_path = os.path.join(os.getcwd(), f"{base_dataset_name}_{uid}".lstrip('/\\'))
         try:
-            self.download_mapping_items(mapping_item=mapping_item, items_download_path=items_download_path, filters=filters)
+            self.download_mapping_items(
+                mapping_item=mapping_item,
+                items_download_path=items_download_path,
+                filters=filters
+            )
             self.jsons_path = os.path.join(items_download_path, "json")
             frames_item = self.parse_lidar_data(mapping_item=mapping_item)
         finally:
