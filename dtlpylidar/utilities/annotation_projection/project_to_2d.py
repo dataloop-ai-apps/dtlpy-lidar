@@ -249,7 +249,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # iterate over all annotations
         annotation: dl.Annotation
         for annotation in tqdm(annotations):
-            start_frame = annotation.frame_num
+            start_frame = annotation.metadata.get('system', dict()).get('frame')
             end_frame = annotation.metadata.get('system', dict()).get('endFrame')
             object_id = annotation.object_id
 
@@ -326,7 +326,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 if __name__ == "__main__":
     item_id = ''
-    full_annotations_only = True
+    full_annotations_only = False
 
     runner = AnnotationProjection()
     # frames json item ID
