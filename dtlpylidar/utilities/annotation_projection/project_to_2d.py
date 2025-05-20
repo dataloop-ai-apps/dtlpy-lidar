@@ -325,8 +325,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 
 if __name__ == "__main__":
-    dl.setenv('prod')
-    item_id = '65670bfcdc18cd144ac914fa'
+    item_id = ''
     full_annotations_only = True
 
     runner = AnnotationProjection()
