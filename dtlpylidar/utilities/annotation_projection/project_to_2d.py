@@ -259,7 +259,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 geo=annotation.geo)
             annotation_label = annotation.label
             annotation_object_visible = annotation.object_visible
-            self.calculate_frame_annotations(object_id=annotation.object_id,
+            self.calculate_frame_annotations(object_id=object_id,
                                              label=annotation_label,
                                              object_visible=annotation_object_visible,
                                              annotation_translation=annotation_translation,
@@ -282,7 +282,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 # project them to 2D with the last projected frame metrics
                 if last_snapshot_frame != last_projected_frame + 1:
                     for frame_num in range(last_projected_frame + 1, last_snapshot_frame):
-                        self.calculate_frame_annotations(object_id=annotation.object_id,
+                        self.calculate_frame_annotations(object_id=object_id,
                                                          label=annotation_label,
                                                          object_visible=annotation_object_visible,
                                                          annotation_translation=annotation_translation,
@@ -297,7 +297,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     geo=frame_annotation.geo)
                 annotation_label = frame_annotation.label
                 annotation_object_visible = frame_annotation.object_visible
-                self.calculate_frame_annotations(object_id=annotation.object_id,
+                self.calculate_frame_annotations(object_id=object_id,
                                                  label=annotation_label,
                                                  object_visible=annotation_object_visible,
                                                  annotation_translation=annotation_translation,
@@ -312,7 +312,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             # project them to 2D with the last projected frame metrics
             if last_projected_frame < end_frame:
                 for frame_num in range(last_projected_frame + 1, end_frame):
-                    self.calculate_frame_annotations(object_id=annotation.object_id,
+                    self.calculate_frame_annotations(object_id=object_id,
                                                      label=annotation_label,
                                                      object_visible=annotation_object_visible,
                                                      annotation_translation=annotation_translation,
