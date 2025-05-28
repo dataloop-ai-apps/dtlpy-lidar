@@ -325,10 +325,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 
 if __name__ == "__main__":
+    # frames json item ID
     item_id = ''
+    frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
     runner = AnnotationProjection()
-    # frames json item ID
-    item = dl.items.get(item_id=item_id)
-    runner.project_annotations_to_2d(item=item, full_annotations_only=full_annotations_only)
+    runner.project_annotations_to_2d(item=frames_item, full_annotations_only=full_annotations_only)
