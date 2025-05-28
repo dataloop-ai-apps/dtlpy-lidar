@@ -110,18 +110,36 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                         x=annotation_pixels[5][0],
                                         y=annotation_pixels[5][1])
         # create cube annotation
-        cube = dl.Cube(label=label,
-                       front_tl=front_tl,
-                       front_tr=front_tr,
-                       front_br=front_br,
-                       front_bl=front_bl,
-                       back_tl=back_tl,
-                       back_tr=back_tr,
-                       back_br=back_br,
-                       back_bl=back_bl)
+        # cube = dl.Cube(label=label,
+        #                front_tl=front_tl,
+        #                front_tr=front_tr,
+        #                front_br=front_br,
+        #                front_bl=front_bl,
+        #                back_tl=back_tl,
+        #                back_tr=back_tr,
+        #                back_br=back_br,
+        #                back_bl=back_bl)
+        polygon1 = dl.Polygon(
+            geo=[
+                [front_tl[0], front_tl[1]],  # front top left
+                [front_tr[0], front_tr[1]],  # front top right
+                [front_br[0], front_br[1]],  # front bottom right
+                [front_bl[0], front_bl[1]],  # front bottom left
+            ],
+            label=label
+        )
+        polygon2 = dl.Polygon(
+            geo=[
+                [back_tl[0], back_tl[1]],    # back top left
+                [back_tr[0], back_tr[1]],    # back top right
+                [back_br[0], back_br[1]],    # back bottom right
+                [back_bl[0], back_bl[1]]     # back bottom left
+            ],
+            label=label
+        )
 
         # return cube annotation
-        return cube
+        return [polygon1, polygon2]
 
     def calculate_frame_annotations(self, object_id, label, object_visible,
                                     annotation_translation, annotation_rotation, annotation_scale,
@@ -206,7 +224,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             projected_pixels = projected_points[:, :2] / np.abs(projected_points[:, 2:3])  # (N, 2)
 
             # create cube annotation if it is inside the image boundaries
-            cube_annotation = self.create_annotation(
+            polygons = self.create_annotation(
                 label=label,
                 annotation_pixels=projected_pixels,
                 width=item.width,
@@ -214,16 +232,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 full_annotations_only=full_annotations_only
             )
             # if cube annotation is not None add it to the item
-            if cube_annotation is None:
+            if polygons is None:
                 continue
             # create annotation builder
             builder = item.annotations.builder()
             # add annotation to the item
-            builder.add(
-                annotation_definition=cube_annotation,
-                object_id=object_id,
-                object_visible=object_visible
-            )
+            for polygon in polygons:
+                builder.add(
+                    annotation_definition=polygon,
+                    object_id=object_id,
+                    object_visible=object_visible
+                )
             # upload annotation to the item
             item.annotations.upload(builder)
 
@@ -269,64 +288,65 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                              camera_calibrations=camera_calibrations,
                                              frame_num=last_projected_frame,
                                              full_annotations_only=full_annotations_only)
-            # iterate over all snapshots and project them to 2D
-            annotation_snapshots = annotation.metadata.get('system', dict()).get('snapshots_', list())
-            for snapshot in annotation_snapshots:
-                frame_annotation: dl.entities.FrameAnnotation = dl.entities.FrameAnnotation.from_snapshot(
-                    annotation=annotation,
-                    _json=snapshot,
-                    fps=None
-                )
-                last_snapshot_frame = frame_annotation.frame_num
-                # if there are frames between the last projected frame and the current snapshot frame
-                # project them to 2D with the last projected frame metrics
-                if last_snapshot_frame != last_projected_frame + 1:
-                    for frame_num in range(last_projected_frame + 1, last_snapshot_frame):
-                        self.calculate_frame_annotations(object_id=object_id,
-                                                         label=annotation_label,
-                                                         object_visible=annotation_object_visible,
-                                                         annotation_translation=annotation_translation,
-                                                         annotation_rotation=annotation_rotation,
-                                                         annotation_scale=annotation_scale,
-                                                         lidar_video_content=lidar_video_content,
-                                                         camera_calibrations=camera_calibrations,
-                                                         frame_num=frame_num,
-                                                         full_annotations_only=full_annotations_only)
-                # project snapshot to 2D with the snapshot metrics
-                annotation_translation, annotation_scale, annotation_rotation = self.get_annotation_metrics(
-                    geo=frame_annotation.geo)
-                annotation_label = frame_annotation.label
-                annotation_object_visible = frame_annotation.object_visible
-                self.calculate_frame_annotations(object_id=object_id,
-                                                 label=annotation_label,
-                                                 object_visible=annotation_object_visible,
-                                                 annotation_translation=annotation_translation,
-                                                 annotation_rotation=annotation_rotation,
-                                                 annotation_scale=annotation_scale,
-                                                 lidar_video_content=lidar_video_content,
-                                                 camera_calibrations=camera_calibrations,
-                                                 frame_num=last_snapshot_frame,
-                                                 full_annotations_only=full_annotations_only)
-                last_projected_frame = last_snapshot_frame
-            # if there are frames between the last projected frame and the end frame
-            # project them to 2D with the last projected frame metrics
-            if last_projected_frame < end_frame:
-                for frame_num in range(last_projected_frame + 1, end_frame):
-                    self.calculate_frame_annotations(object_id=object_id,
-                                                     label=annotation_label,
-                                                     object_visible=annotation_object_visible,
-                                                     annotation_translation=annotation_translation,
-                                                     annotation_rotation=annotation_rotation,
-                                                     annotation_scale=annotation_scale,
-                                                     lidar_video_content=lidar_video_content,
-                                                     camera_calibrations=camera_calibrations,
-                                                     frame_num=frame_num,
-                                                     full_annotations_only=full_annotations_only)
+            # # iterate over all snapshots and project them to 2D
+            # annotation_snapshots = annotation.metadata.get('system', dict()).get('snapshots_', list())
+            # for snapshot in annotation_snapshots:
+            #     frame_annotation: dl.entities.FrameAnnotation = dl.entities.FrameAnnotation.from_snapshot(
+            #         annotation=annotation,
+            #         _json=snapshot,
+            #         fps=None
+            #     )
+            #     last_snapshot_frame = frame_annotation.frame_num
+            #     # if there are frames between the last projected frame and the current snapshot frame
+            #     # project them to 2D with the last projected frame metrics
+            #     if last_snapshot_frame != last_projected_frame + 1:
+            #         for frame_num in range(last_projected_frame + 1, last_snapshot_frame):
+            #             self.calculate_frame_annotations(object_id=object_id,
+            #                                              label=annotation_label,
+            #                                              object_visible=annotation_object_visible,
+            #                                              annotation_translation=annotation_translation,
+            #                                              annotation_rotation=annotation_rotation,
+            #                                              annotation_scale=annotation_scale,
+            #                                              lidar_video_content=lidar_video_content,
+            #                                              camera_calibrations=camera_calibrations,
+            #                                              frame_num=frame_num,
+            #                                              full_annotations_only=full_annotations_only)
+            #     # project snapshot to 2D with the snapshot metrics
+            #     annotation_translation, annotation_scale, annotation_rotation = self.get_annotation_metrics(
+            #         geo=frame_annotation.geo)
+            #     annotation_label = frame_annotation.label
+            #     annotation_object_visible = frame_annotation.object_visible
+            #     self.calculate_frame_annotations(object_id=object_id,
+            #                                      label=annotation_label,
+            #                                      object_visible=annotation_object_visible,
+            #                                      annotation_translation=annotation_translation,
+            #                                      annotation_rotation=annotation_rotation,
+            #                                      annotation_scale=annotation_scale,
+            #                                      lidar_video_content=lidar_video_content,
+            #                                      camera_calibrations=camera_calibrations,
+            #                                      frame_num=last_snapshot_frame,
+            #                                      full_annotations_only=full_annotations_only)
+            #     last_projected_frame = last_snapshot_frame
+            # # if there are frames between the last projected frame and the end frame
+            # # project them to 2D with the last projected frame metrics
+            # if last_projected_frame < end_frame:
+            #     for frame_num in range(last_projected_frame + 1, end_frame):
+            #         self.calculate_frame_annotations(object_id=object_id,
+            #                                          label=annotation_label,
+            #                                          object_visible=annotation_object_visible,
+            #                                          annotation_translation=annotation_translation,
+            #                                          annotation_rotation=annotation_rotation,
+            #                                          annotation_scale=annotation_scale,
+            #                                          lidar_video_content=lidar_video_content,
+            #                                          camera_calibrations=camera_calibrations,
+            #                                          frame_num=frame_num,
+            #                                          full_annotations_only=full_annotations_only)
 
 
 if __name__ == "__main__":
     # frames json item ID
-    item_id = ''
+    dl.setenv('rc')
+    item_id = '6837382df8598a78a31161bc'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
