@@ -362,14 +362,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     r14 = (r ** 14) if k7 > 0 else 0
                     r16 = (r ** 16) if k8 > 0 else 0
 
-                    radial = 1 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                    radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
 
-                    x_distorted = x * radial + (2 * p1 * x * y + p2 * (r2 + 2 * x ** 2))
-                    y_distorted = y * radial + (p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y)
+                    x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x ** 2))
+                    y_d = y * radial + (p1 * (r2 + 2.0 * y ** 2) + 2.0 * p2 * x * y)
 
                     # Convert back to pixel coordinates
-                    u = fx * x_distorted + s * y_distorted + cx
-                    v = fy * y_distorted + cy
+                    # u = fx * x_d + s * y_d + cx
+                    u = fx * x_d + cx
+                    v = fy * y_d + cy
 
                     # # Regular #
                     #
