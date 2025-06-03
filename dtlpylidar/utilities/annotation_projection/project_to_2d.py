@@ -5,6 +5,8 @@ import uuid
 import json
 import dtlpylidar.utilities.transformations as transformations
 from tqdm import tqdm
+import cv2
+import math
 
 
 class AnnotationProjection(dl.BaseServiceRunner):
@@ -109,7 +111,19 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                         height=height,
                                         x=annotation_pixels[5][0],
                                         y=annotation_pixels[5][1])
-        # create cube annotation
+
+        # points_dict = {
+        #     "front_tl": front_tl,
+        #     "front_tr": front_tr,
+        #     "front_bl": front_bl,
+        #     "front_br": front_br,
+        #     "back_tl": back_tl,
+        #     "back_tr": back_tr,
+        #     "back_bl": back_bl,
+        #     "back_br": back_br
+        # }
+
+        # # create cube annotation
         # cube = dl.Cube(label=label,
         #                front_tl=front_tl,
         #                front_tr=front_tr,
@@ -119,27 +133,41 @@ class AnnotationProjection(dl.BaseServiceRunner):
         #                back_tr=back_tr,
         #                back_br=back_br,
         #                back_bl=back_bl)
-        polygon1 = dl.Polygon(
-            geo=[
-                [front_tl[0], front_tl[1]],  # front top left
-                [front_tr[0], front_tr[1]],  # front top right
-                [front_br[0], front_br[1]],  # front bottom right
-                [front_bl[0], front_bl[1]],  # front bottom left
-            ],
-            label=label
-        )
-        polygon2 = dl.Polygon(
-            geo=[
-                [back_tl[0], back_tl[1]],    # back top left
-                [back_tr[0], back_tr[1]],    # back top right
-                [back_br[0], back_br[1]],    # back bottom right
-                [back_bl[0], back_bl[1]]     # back bottom left
-            ],
-            label=label
-        )
+        # return [cube]
 
-        # return cube annotation
-        return [polygon1, polygon2]
+        # create polygons annotation
+        # polygon1 = dl.Polygon(
+        #     geo=[
+        #         [front_tl[0], front_tl[1]],  # front top left
+        #         [front_tr[0], front_tr[1]],  # front top right
+        #         [front_br[0], front_br[1]],  # front bottom right
+        #         [front_bl[0], front_bl[1]],  # front bottom left
+        #     ],
+        #     label=label
+        # )
+        # polygon2 = dl.Polygon(
+        #     geo=[
+        #         [back_tl[0], back_tl[1]],    # back top left
+        #         [back_tr[0], back_tr[1]],    # back top right
+        #         [back_br[0], back_br[1]],    # back bottom right
+        #         [back_bl[0], back_bl[1]]     # back bottom left
+        #     ],
+        #     label=label
+        # )
+        # return [polygon1, polygon2]
+
+        # create points annotation
+        points = [
+            dl.Point(x=front_tl[0], y=front_tl[1], label=label),  # front top left
+            dl.Point(x=front_tr[0], y=front_tr[1], label=label),  # front top right
+            dl.Point(x=front_br[0], y=front_br[1], label=label),  # front bottom right
+            dl.Point(x=front_bl[0], y=front_bl[1], label=label),  # front bottom left
+            dl.Point(x=back_tl[0], y=back_tl[1], label=label),    # back top left
+            dl.Point(x=back_tr[0], y=back_tr[1], label=label),    # back top right
+            dl.Point(x=back_br[0], y=back_br[1], label=label),    # back bottom right
+            dl.Point(x=back_bl[0], y=back_bl[1], label=label)     # back bottom left
+        ]
+        return points
 
     def calculate_frame_annotations(self, object_id, label, object_visible,
                                     annotation_translation, annotation_rotation, annotation_scale,
@@ -218,28 +246,84 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 [0 , 0 , 0 , 1]
             ])
 
+            camera_distortion = intrinsic_data.get('distortion', dict())
+            k1 = camera_distortion["k1"]
+            k2 = camera_distortion["k2"]
+            k3 = camera_distortion["k3"]
+            p1 = camera_distortion["p1"]
+            p2 = camera_distortion["p2"]
+
+
+            # MANUAL projection
+
             mvp = projection_matrix @ view_matrix @ model_matrix
             points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
             projected_points = (mvp @ points_homogeneous.T).T  # (N, 4)
             projected_pixels = projected_points[:, :2] / np.abs(projected_points[:, 2:3])  # (N, 2)
 
+            # points_2d = []
+            # for projected_pixel in projected_pixels:
+            #     r = math.sqrt(projected_pixel[0] ** 2 + projected_pixel[1] ** 2)
+            #     x_d = projected_pixel[0] * (1 + k1 * r ** 2 + k2 * r ** 4 + k3 * r ** 6) + 2 * p1 * projected_pixel[0] * projected_pixel[1] + p2 * (r ** 2 + 2 * projected_pixel[0] ** 2)
+            #     y_d = projected_pixel[1] * (1 + k1 * r ** 2 + k2 * r ** 4 + k3 * r ** 6) + p1 * (r ** 2 + 2 * projected_pixel[1] ** 2) + 2 * p2 * projected_pixel[0] * projected_pixel[1]
+            #     points_2d.append([x_d, y_d])
+            #     print("PREV: {}, NEXT: {}".format(projected_pixel, [x_d, y_d]))
+            #     exit()
+            # points_2d = np.array(points_2d)  # (N, 2)
+
+            points_2d = []
+            for projected_pixel in projected_pixels:
+                x_px, y_px = projected_pixel
+                # Normalize to camera coordinates
+                x = (x_px - cx) / fx
+                y = (y_px - cy) / fy
+
+                r2 = x ** 2 + y ** 2
+                radial = 1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3
+
+                x_distorted = x * radial + 2 * p1 * x * y + p2 * (r2 + 2 * x ** 2)
+                y_distorted = y * radial + p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y
+
+                # Convert back to pixel coordinates
+                u = fx * x_distorted + s * y_distorted + cx
+                v = fy * y_distorted + cy
+
+                points_2d.append([u, v])
+
+            # OPENCV projection
+
+            # mv = view_matrix @ model_matrix  # Model View matrix
+            # p = projection_matrix[:3, :3]  # Projection matrix
+            # points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+            # projected_points = (mv @ points_homogeneous.T).T  # (N, 4)
+            # projected_points = projected_points[:, :3]  # (N, 3)
+            #
+            # rvec = np.zeros((3, 1), dtype=np.float64)
+            # tvec = np.zeros((3, 1), dtype=np.float64)
+            # dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+            #
+            # # append zeros dim to 3rd coordinate # (N, 2) -> (N, 3)
+            # points_2d, _ = cv2.projectPoints(projected_points, rvec, tvec, p, dist_coeffs)
+            # points_2d = points_2d.reshape(-1, 2)  # (N, 2)
+
+
             # create cube annotation if it is inside the image boundaries
-            polygons = self.create_annotation(
+            annotations = self.create_annotation(
                 label=label,
-                annotation_pixels=projected_pixels,
+                annotation_pixels=points_2d,
                 width=item.width,
                 height=item.height,
                 full_annotations_only=full_annotations_only
             )
             # if cube annotation is not None add it to the item
-            if polygons is None:
+            if annotations is None:
                 continue
             # create annotation builder
             builder = item.annotations.builder()
             # add annotation to the item
-            for polygon in polygons:
+            for annotation in annotations:
                 builder.add(
-                    annotation_definition=polygon,
+                    annotation_definition=annotation,
                     object_id=object_id,
                     object_visible=object_visible
                 )
@@ -254,9 +338,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :return: None
         """
         # download lidar scene video's json
-        uid = str(uuid.uuid4())
-        items_path = os.path.join(os.getcwd(), uid)
-        path = item.download(local_path=items_path)
+        # uid = str(uuid.uuid4())
+        # items_path = os.path.join(os.getcwd(), uid)
+        items_path = os.path.join(os.getcwd(), item.id)
+        path = item.download(local_path=items_path, overwrite=True)
         with open(path, 'r') as f:
             lidar_video_content = json.load(f)
         # get all annotations of the item
@@ -346,7 +431,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '6837382df8598a78a31161bc'
+    item_id = '683ee06b0de675aa76fda988'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
