@@ -322,6 +322,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             k8 = camera_distortion.get("k8", 0.0) * factor_m  # Optional, if not present, set to 0
             p1 = camera_distortion["p1"] * factor_m
             p2 = camera_distortion["p2"] * factor_m
+            r0 = camera_distortion.get('r0', 1.0)
 
             # MANUAL projection
 
@@ -351,7 +352,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     x = (x_px - cx) / fx
                     y = (y_px - cy) / fy
 
-                    r = math.sqrt(x ** 2 + y ** 2)
+                    r = math.sqrt(x ** 2 + y ** 2) / r0
                     r2 = (r ** 2) if k1 > 0 else 0
                     r4 = (r ** 4) if k2 > 0 else 0
                     r6 = (r ** 6) if k3 > 0 else 0
@@ -562,7 +563,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '683f11b51bd0d544bf0f7fa4'
+    item_id = '683f24e48b8ed565b78dcdbd'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
