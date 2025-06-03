@@ -331,16 +331,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
             projected_points = (mvp @ points_homogeneous.T).T  # (N, 4)
             projected_pixels = projected_points[:, :2] / np.abs(projected_points[:, 2:3])  # (N, 2)
 
-            # points_2d = []
-            # for projected_pixel in projected_pixels:
-            #     r = math.sqrt(projected_pixel[0] ** 2 + projected_pixel[1] ** 2)
-            #     x_d = projected_pixel[0] * (1 + k1 * r ** 2 + k2 * r ** 4 + k3 * r ** 6) + 2 * p1 * projected_pixel[0] * projected_pixel[1] + p2 * (r ** 2 + 2 * projected_pixel[0] ** 2)
-            #     y_d = projected_pixel[1] * (1 + k1 * r ** 2 + k2 * r ** 4 + k3 * r ** 6) + p1 * (r ** 2 + 2 * projected_pixel[1] ** 2) + 2 * p2 * projected_pixel[0] * projected_pixel[1]
-            #     points_2d.append([x_d, y_d])
-            #     print("PREV: {}, NEXT: {}".format(projected_pixel, [x_d, y_d]))
-            #     exit()
-            # points_2d = np.array(points_2d)  # (N, 2)
-
             points_2d = []
             for projected_pixel in projected_pixels:
                 x_px, y_px = projected_pixel
@@ -353,14 +343,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     y = (y_px - cy) / fy
 
                     r = math.sqrt(x ** 2 + y ** 2) / r0
-                    r2 = (r ** 2) if k1 > 0 else 0
-                    r4 = (r ** 4) if k2 > 0 else 0
-                    r6 = (r ** 6) if k3 > 0 else 0
-                    r8 = (r ** 8) if k4 > 0 else 0
-                    r10 = (r ** 10) if k5 > 0 else 0
-                    r12 = (r ** 12) if k6 > 0 else 0
-                    r14 = (r ** 14) if k7 > 0 else 0
-                    r16 = (r ** 16) if k8 > 0 else 0
+                    r2 = (r ** 2) if k1 != 0.0 else 0
+                    r4 = (r ** 4) if k2 != 0.0 else 0
+                    r6 = (r ** 6) if k3 != 0.0 else 0
+                    r8 = (r ** 8) if k4 != 0.0 else 0
+                    r10 = (r ** 10) if k5 != 0.0 else 0
+                    r12 = (r ** 12) if k6 != 0.0 else 0
+                    r14 = (r ** 14) if k7 != 0.0 else 0
+                    r16 = (r ** 16) if k8 != 0.0 else 0
 
                     radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
 
