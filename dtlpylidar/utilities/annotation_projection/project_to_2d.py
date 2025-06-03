@@ -198,6 +198,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param frame_num:
         :return: None
         """
+        apply_image_undistortion = True
+        apply_annotation_distortion = False
+
         # calculate 3D cube points from annotation (PCD normalized)
         points = transformations.calc_cuboid_corners(
             dimensions=annotation_scale
@@ -222,44 +225,44 @@ class AnnotationProjection(dl.BaseServiceRunner):
             if not os.path.exists(image_path):
                 item.download(local_path=frames_item.id)
 
-                # APPLY UNDISTORTION
-                camera_id = image_calibrations.get('camera_id')
-                camera_calibrations = cameras_map.get(camera_id)
-                sensors_data = camera_calibrations.get('sensorsData')
+                if apply_image_undistortion:
+                    camera_id = image_calibrations.get('camera_id')
+                    camera_calibrations = cameras_map.get(camera_id)
+                    sensors_data = camera_calibrations.get('sensorsData')
 
-                # calculate projection matrix (Default values: Orthographic projection)
-                intrinsic_data = sensors_data.get('intrinsicData', dict())
-                fx = intrinsic_data.get('fx', 1.0)
-                fy = intrinsic_data.get('fy', 1.0)
-                s = intrinsic_data.get('skew', 0.0)
-                cx = intrinsic_data.get('cx', 0.0)
-                cy = intrinsic_data.get('cy', 0.0)
-                K = np.array([
-                    [fx, s , cx],
-                    [0 , fy, cy],
-                    [0 , 0 , 1 ]
-                ])
+                    # calculate projection matrix (Default values: Orthographic projection)
+                    intrinsic_data = sensors_data.get('intrinsicData', dict())
+                    fx = intrinsic_data.get('fx', 1.0)
+                    fy = intrinsic_data.get('fy', 1.0)
+                    s = intrinsic_data.get('skew', 0.0)
+                    cx = intrinsic_data.get('cx', 0.0)
+                    cy = intrinsic_data.get('cy', 0.0)
+                    K = np.array([
+                        [fx, s , cx],
+                        [0 , fy, cy],
+                        [0 , 0 , 1 ]
+                    ])
 
-                camera_distortion = intrinsic_data.get('distortion', dict())
-                k1 = camera_distortion["k1"]
-                k2 = camera_distortion["k2"]
-                k3 = camera_distortion["k3"]
-                p1 = camera_distortion["p1"]
-                p2 = camera_distortion["p2"]
-                D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
+                    camera_distortion = intrinsic_data.get('distortion', dict())
+                    k1 = camera_distortion["k1"]
+                    k2 = camera_distortion["k2"]
+                    k3 = camera_distortion["k3"]
+                    p1 = camera_distortion["p1"]
+                    p2 = camera_distortion["p2"]
+                    D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
 
-                # Original distorted image
-                image = cv2.imread(image_path)
-                h, w = image.shape[:2]
+                    # Original distorted image
+                    image = cv2.imread(image_path)
+                    h, w = image.shape[:2]
 
-                # Compute optimal rectified camera matrix (keeps FOV)
-                new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
+                    # Compute optimal rectified camera matrix (keeps FOV)
+                    new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
 
-                # Undistort
-                undistorted = cv2.undistort(image, K, D, None, new_K)
+                    # Undistort
+                    undistorted = cv2.undistort(image, K, D, None, new_K)
 
-                # Save or display
-                cv2.imwrite(image_path, undistorted)
+                    # Save or display
+                    cv2.imwrite(image_path, undistorted)
 
             images_map[item_id] = image_path
 
@@ -331,13 +334,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
             #     exit()
             # points_2d = np.array(points_2d)  # (N, 2)
 
-            apply_distortion = False
-
             points_2d = []
             for projected_pixel in projected_pixels:
                 x_px, y_px = projected_pixel
 
-                if apply_distortion:
+                if apply_annotation_distortion:
                     # Normalize to camera coordinates
                     x = (x_px - cx) / fx
                     y = (y_px - cy) / fy
