@@ -38,11 +38,13 @@ class Intrinsic:
 
 class Distortion:
     def __init__(self, k1=0.0, k2=0.0, k3=0.0, k4=0.0, k5=0.0, k6=0.0, k7=0.0, k8=0.0,
-                 p1=0.0, p2=0.0):
+                 p1=0.0, p2=0.0,
+                 r0=1.0):
         """
         Distortion matrix parameters:
         radial distortion coefficients: k1, k2, k3, k4, k5, k6, k7, k8
         tangential distortion coefficients: p1, p2
+        radial distortion scale: r0
         """
         self.k1 = k1
         self.k2 = k2
@@ -54,6 +56,7 @@ class Distortion:
         self.k8 = k8
         self.p1 = p1
         self.p2 = p2
+        self.r0 = r0
 
     def to_json(self):
         """
@@ -81,6 +84,8 @@ class Distortion:
                 'k7': self.k7,
                 'k8': self.k8
             })
+        if self.r0 != 1.0:
+            distortion_dict['r0'] = self.r0
 
         return distortion_dict
 
