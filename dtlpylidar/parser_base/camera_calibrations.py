@@ -37,18 +37,21 @@ class Intrinsic:
 
 
 class Distortion:
-    def __init__(self, k1=0.0, k2=0.0, k3=0.0, p1=0.0, p2=0.0):
+    def __init__(self, k1=0.0, k2=0.0, k3=0.0, k4=0.0, k5=0.0, k6=0.0, k7=0.0, k8=0.0,
+                 p1=0.0, p2=0.0):
         """
-        Distortion matrix parameters
-        :param k1:
-        :param k2:
-        :param k3:
-        :param p1:
-        :param p2:
+        Distortion matrix parameters:
+        radial distortion coefficients: k1, k2, k3, k4, k5, k6, k7, k8
+        tangential distortion coefficients: p1, p2
         """
         self.k1 = k1
         self.k2 = k2
         self.k3 = k3
+        self.k4 = k4
+        self.k5 = k5
+        self.k6 = k6
+        self.k7 = k7
+        self.k8 = k8
         self.p1 = p1
         self.p2 = p2
 
@@ -57,13 +60,29 @@ class Distortion:
         Distortion object to dict
         :return:
         """
-        return {
+        # Basic distortion parameters
+        distortion_dict = {
             'k1': self.k1,
             'k2': self.k2,
             'k3': self.k3,
             'p1': self.p1,
             'p2': self.p2
         }
+        # Extended distortion parameters
+        if self.k4 != 0.0 or self.k5 != 0.0 or self.k6 != 0.0:
+            distortion_dict.update({
+                'k4': self.k4,
+                'k5': self.k5,
+                'k6': self.k6,
+
+            })
+        if self.k7 != 0.0 or self.k8 != 0.0:
+            distortion_dict.update({
+                'k7': self.k7,
+                'k8': self.k8
+            })
+
+        return distortion_dict
 
 
 class LidarCameraData:
