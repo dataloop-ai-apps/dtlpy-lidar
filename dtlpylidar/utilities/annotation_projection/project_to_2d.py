@@ -198,8 +198,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param frame_num:
         :return: None
         """
-        apply_image_undistortion = True
-        apply_annotation_distortion = False
+        apply_image_undistortion = False
+        apply_annotation_distortion = True
+        factor_m = -150.0
 
         # calculate 3D cube points from annotation (PCD normalized)
         points = transformations.calc_cuboid_corners(
@@ -225,6 +226,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             if not os.path.exists(image_path):
                 item.download(local_path=frames_item.id)
 
+                # Remove distortion from image
                 if apply_image_undistortion:
                     camera_id = image_calibrations.get('camera_id')
                     camera_calibrations = cameras_map.get(camera_id)
@@ -249,7 +251,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     k3 = camera_distortion["k3"]
                     p1 = camera_distortion["p1"]
                     p2 = camera_distortion["p2"]
-                    D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
+                    D = factor_m * np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
 
                     # Original distorted image
                     image = cv2.imread(image_path)
@@ -310,12 +312,16 @@ class AnnotationProjection(dl.BaseServiceRunner):
             ])
 
             camera_distortion = intrinsic_data.get('distortion', dict())
-            k1 = camera_distortion["k1"]
-            k2 = camera_distortion["k2"]
-            k3 = camera_distortion["k3"]
-            p1 = camera_distortion["p1"]
-            p2 = camera_distortion["p2"]
-
+            k1 = camera_distortion["k1"] * factor_m
+            k2 = camera_distortion["k2"] * factor_m
+            k3 = camera_distortion["k3"] * factor_m
+            k4 = camera_distortion.get("k4", 0.0) * factor_m  # Optional, if not present, set to 0
+            k5 = camera_distortion.get("k5", 0.0) * factor_m  # Optional, if not present, set to 0
+            k6 = camera_distortion.get("k6", 0.0) * factor_m  # Optional, if not present, set to 0
+            k7 = camera_distortion.get("k7", 0.0) * factor_m  # Optional, if not present, set to 0
+            k8 = camera_distortion.get("k8", 0.0) * factor_m  # Optional, if not present, set to 0
+            p1 = camera_distortion["p1"] * factor_m
+            p2 = camera_distortion["p2"] * factor_m
 
             # MANUAL projection
 
@@ -339,19 +345,54 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 x_px, y_px = projected_pixel
 
                 if apply_annotation_distortion:
+                    # Normalized #
+
                     # Normalize to camera coordinates
                     x = (x_px - cx) / fx
                     y = (y_px - cy) / fy
 
-                    r2 = x ** 2 + y ** 2
-                    radial = 1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3
+                    r = math.sqrt(x ** 2 + y ** 2)
+                    r2 = (r ** 2) if k1 > 0 else 0
+                    r4 = (r ** 4) if k2 > 0 else 0
+                    r6 = (r ** 6) if k3 > 0 else 0
+                    r8 = (r ** 8) if k4 > 0 else 0
+                    r10 = (r ** 10) if k5 > 0 else 0
+                    r12 = (r ** 12) if k6 > 0 else 0
+                    r14 = (r ** 14) if k7 > 0 else 0
+                    r16 = (r ** 16) if k8 > 0 else 0
 
-                    x_distorted = x * radial + 2 * p1 * x * y + p2 * (r2 + 2 * x ** 2)
-                    y_distorted = y * radial + p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y
+                    radial = 1 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+
+                    x_distorted = x * radial + (2 * p1 * x * y + p2 * (r2 + 2 * x ** 2))
+                    y_distorted = y * radial + (p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y)
 
                     # Convert back to pixel coordinates
                     u = fx * x_distorted + s * y_distorted + cx
                     v = fy * y_distorted + cy
+
+                    # # Regular #
+                    #
+                    # x = x_px
+                    # y = y_px
+                    #
+                    # r = math.sqrt(x ** 2 + y ** 2)
+                    # r2 = (r ** 2) if k1 > 0 else 0
+                    # r4 = (r ** 4) if k2 > 0 else 0
+                    # r6 = (r ** 6) if k3 > 0 else 0
+                    # r8 = (r ** 8) if k4 > 0 else 0
+                    # r10 = (r ** 10) if k5 > 0 else 0
+                    # r12 = (r ** 12) if k6 > 0 else 0
+                    # r14 = (r ** 14) if k7 > 0 else 0
+                    # r16 = (r ** 16) if k8 > 0 else 0
+                    #
+                    # radial = 1 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                    #
+                    # x_distorted = x * radial + (2 * p1 * x * y + p2 * (r2 + 2 * x ** 2))
+                    # y_distorted = y * radial + (p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y)
+                    #
+                    # # Convert back to pixel coordinates
+                    # u = x_distorted
+                    # v = y_distorted
                 else:
                     # If no distortion, just use the projected pixel directly
                     u = x_px
@@ -521,7 +562,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '683ee06b0de675aa76fda988'
+    item_id = '683f11b51bd0d544bf0f7fa4'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
