@@ -10,8 +10,18 @@ import math
 
 
 class AnnotationProjection(dl.BaseServiceRunner):
-    def __init__(self):
-        ...
+    def __init__(self, dataset: dl.Dataset = None):
+        def hex_to_bgr(hex_color: str):
+            hex_color = hex_color.lstrip('#')
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return (b, g, r)  # OpenCV uses BGR
+
+        self.labels_colors = {}
+        if dataset is not None:
+            for label_name, label_data in dataset.labels_flat_dict.items():
+                self.labels_colors[label_name] = hex_to_bgr(label_data.color)
 
     @staticmethod
     def get_annotation_metrics(geo):
@@ -203,6 +213,56 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # the image boundaries
         cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
 
+        images_map = {}
+        for idx, image_calibrations in enumerate(frame_images):
+            # get image and camera calibrations
+            item_id = image_calibrations.get('image_id')
+            item = dl.items.get(item_id=item_id)
+            image_path = str(os.path.join(frames_item.id, item.name))
+            if not os.path.exists(image_path):
+                item.download(local_path=frames_item.id)
+
+                # APPLY UNDISTORTION
+                camera_id = image_calibrations.get('camera_id')
+                camera_calibrations = cameras_map.get(camera_id)
+                sensors_data = camera_calibrations.get('sensorsData')
+
+                # calculate projection matrix (Default values: Orthographic projection)
+                intrinsic_data = sensors_data.get('intrinsicData', dict())
+                fx = intrinsic_data.get('fx', 1.0)
+                fy = intrinsic_data.get('fy', 1.0)
+                s = intrinsic_data.get('skew', 0.0)
+                cx = intrinsic_data.get('cx', 0.0)
+                cy = intrinsic_data.get('cy', 0.0)
+                K = np.array([
+                    [fx, s , cx],
+                    [0 , fy, cy],
+                    [0 , 0 , 1 ]
+                ])
+
+                camera_distortion = intrinsic_data.get('distortion', dict())
+                k1 = camera_distortion["k1"]
+                k2 = camera_distortion["k2"]
+                k3 = camera_distortion["k3"]
+                p1 = camera_distortion["p1"]
+                p2 = camera_distortion["p2"]
+                D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
+
+                # Original distorted image
+                image = cv2.imread(image_path)
+                h, w = image.shape[:2]
+
+                # Compute optimal rectified camera matrix (keeps FOV)
+                new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
+
+                # Undistort
+                undistorted = cv2.undistort(image, K, D, None, new_K)
+
+                # Save or display
+                cv2.imwrite(image_path, undistorted)
+
+            images_map[item_id] = image_path
+
         # iterate over images that correspond with frame
         for idx, image_calibrations in enumerate(frame_images):
             # get image and camera calibrations
@@ -271,22 +331,30 @@ class AnnotationProjection(dl.BaseServiceRunner):
             #     exit()
             # points_2d = np.array(points_2d)  # (N, 2)
 
+            apply_distortion = False
+
             points_2d = []
             for projected_pixel in projected_pixels:
                 x_px, y_px = projected_pixel
-                # Normalize to camera coordinates
-                x = (x_px - cx) / fx
-                y = (y_px - cy) / fy
 
-                r2 = x ** 2 + y ** 2
-                radial = 1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3
+                if apply_distortion:
+                    # Normalize to camera coordinates
+                    x = (x_px - cx) / fx
+                    y = (y_px - cy) / fy
 
-                x_distorted = x * radial + 2 * p1 * x * y + p2 * (r2 + 2 * x ** 2)
-                y_distorted = y * radial + p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y
+                    r2 = x ** 2 + y ** 2
+                    radial = 1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3
 
-                # Convert back to pixel coordinates
-                u = fx * x_distorted + s * y_distorted + cx
-                v = fy * y_distorted + cy
+                    x_distorted = x * radial + 2 * p1 * x * y + p2 * (r2 + 2 * x ** 2)
+                    y_distorted = y * radial + p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y
+
+                    # Convert back to pixel coordinates
+                    u = fx * x_distorted + s * y_distorted + cx
+                    v = fy * y_distorted + cy
+                else:
+                    # If no distortion, just use the projected pixel directly
+                    u = x_px
+                    v = y_px
 
                 points_2d.append([u, v])
 
@@ -318,17 +386,38 @@ class AnnotationProjection(dl.BaseServiceRunner):
             # if cube annotation is not None add it to the item
             if annotations is None:
                 continue
-            # create annotation builder
-            builder = item.annotations.builder()
-            # add annotation to the item
+
+            anno_2d = []
             for annotation in annotations:
-                builder.add(
-                    annotation_definition=annotation,
-                    object_id=object_id,
-                    object_visible=object_visible
-                )
-            # upload annotation to the item
-            item.annotations.upload(builder)
+                anno_2d.append(annotation.geo)
+            image_path = images_map.get(item_id)
+            image = cv2.imread(image_path)
+
+            edges = [
+                (0, 1), (1, 2), (2, 3), (3, 0),  # front face
+                (4, 5), (5, 6), (6, 7), (7, 4),  # back face
+                (0, 4), (1, 5), (2, 6), (3, 7)  # connecting edges
+            ]
+
+
+            for start_idx, end_idx in edges:
+                pt1 = tuple(np.round(points_2d[start_idx]).astype(int))
+                pt2 = tuple(np.round(points_2d[end_idx]).astype(int))
+                color = self.labels_colors.get(label, (255, 255, 255))  # Default color is white if label not found
+                cv2.line(image, pt1, pt2, color=color, thickness=2)
+            cv2.imwrite(image_path, image)
+
+            # # create annotation builder
+            # builder = item.annotations.builder()
+            # # add annotation to the item
+            # for annotation in annotations:
+            #     builder.add(
+            #         annotation_definition=annotation,
+            #         object_id=object_id,
+            #         object_visible=object_visible
+            #     )
+            # # upload annotation to the item
+            # item.annotations.upload(builder)
 
     def project_annotations_to_2d(self, item: dl.Item, full_annotations_only: bool = False):
         """
@@ -435,5 +524,5 @@ if __name__ == "__main__":
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
-    runner = AnnotationProjection()
+    runner = AnnotationProjection(dataset=frames_item.dataset)
     runner.project_annotations_to_2d(item=frames_item, full_annotations_only=full_annotations_only)
