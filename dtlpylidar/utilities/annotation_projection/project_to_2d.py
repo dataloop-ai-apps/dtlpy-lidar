@@ -228,46 +228,46 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 download_image_path = os.path.dirname(image_path)
                 item.download(local_path=download_image_path)
 
-                # # Remove distortion from image
-                # if apply_image_undistortion:
-                #     camera_id = image_calibrations.get('camera_id')
-                #     camera_calibrations = cameras_map.get(camera_id)
-                #     sensors_data = camera_calibrations.get('sensorsData')
-                #
-                #     # calculate projection matrix (Default values: Orthographic projection)
-                #     intrinsic_data = sensors_data.get('intrinsicData', dict())
-                #     fx = intrinsic_data.get('fx', 1.0)
-                #     fy = intrinsic_data.get('fy', 1.0)
-                #     s = intrinsic_data.get('skew', 0.0)
-                #     cx = intrinsic_data.get('cx', 0.0)
-                #     cy = intrinsic_data.get('cy', 0.0)
-                #     K = np.array([
-                #         [fx, s , cx],
-                #         [0 , fy, cy],
-                #         [0 , 0 , 1 ]
-                #     ])
-                #
-                #     camera_distortion = intrinsic_data.get('distortion', dict())
-                #     k1 = camera_distortion["k1"]
-                #     k2 = camera_distortion["k2"]
-                #     k3 = camera_distortion["k3"]
-                #     p1 = camera_distortion["p1"]
-                #     p2 = camera_distortion["p2"]
-                #     # factor_m = camera_distortion.get('m', 1.0)
-                #     D = factor_m * np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
-                #
-                #     # Original distorted image
-                #     image = cv2.imread(image_path)
-                #     h, w = image.shape[:2]
-                #
-                #     # Compute optimal rectified camera matrix (keeps FOV)
-                #     new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
-                #
-                #     # Undistort
-                #     undistorted = cv2.undistort(image, K, D, None, new_K)
-                #
-                #     # Save or display
-                #     cv2.imwrite(image_path, undistorted)
+                # Remove distortion from image
+                if apply_image_undistortion:
+                    camera_id = image_calibrations.get('camera_id')
+                    camera_calibrations = cameras_map.get(camera_id)
+                    sensors_data = camera_calibrations.get('sensorsData')
+
+                    # calculate projection matrix (Default values: Orthographic projection)
+                    intrinsic_data = sensors_data.get('intrinsicData', dict())
+                    fx = intrinsic_data.get('fx', 1.0)
+                    fy = intrinsic_data.get('fy', 1.0)
+                    s = intrinsic_data.get('skew', 0.0)
+                    cx = intrinsic_data.get('cx', 0.0)
+                    cy = intrinsic_data.get('cy', 0.0)
+                    K = np.array([
+                        [fx, s , cx],
+                        [0 , fy, cy],
+                        [0 , 0 , 1 ]
+                    ])
+
+                    camera_distortion = intrinsic_data.get('distortion', dict())
+                    k1 = camera_distortion["k1"]
+                    k2 = camera_distortion["k2"]
+                    k3 = camera_distortion["k3"]
+                    p1 = camera_distortion["p1"]
+                    p2 = camera_distortion["p2"]
+                    # factor_m = camera_distortion.get('m', 1.0)
+                    D = factor_m * np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
+
+                    # Original distorted image
+                    image = cv2.imread(image_path)
+                    h, w = image.shape[:2]
+
+                    # Compute optimal rectified camera matrix (keeps FOV)
+                    new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
+
+                    # Undistort
+                    undistorted = cv2.undistort(image, K, D, None, new_K)
+
+                    # Save or display
+                    cv2.imwrite(image_path, undistorted)
 
             images_map[item_id] = image_path
 
@@ -328,12 +328,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
             p2 = camera_distortion["p2"] * factor_m
             r0 = camera_distortion.get('r0', 1.0)
 
-            # MANUAL projection
+            # MVP
 
             mvp = projection_matrix @ view_matrix @ model_matrix
             points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
             projected_points = (mvp @ points_homogeneous.T).T  # (N, 4)
             projected_pixels = projected_points[:, :2] / np.abs(projected_points[:, 2:3])  # (N, 2)
+
+            # DISTORTION
 
             points_2d = []
             for projected_pixel in projected_pixels:
@@ -349,7 +351,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     x = (x_px / item.width) * 2.0 - 1.0
                     y = (y_px / item.height) * 2.0 - 1.0
 
-                    r = math.sqrt(x ** 2 + y ** 2) / r0
+                    r = math.sqrt(x * x + y * y) / r0
                     r2 = r * r # if k1 != 0.0 else 0
                     r4 = r2 * r2 # if k2 != 0.0 else 0
                     r6 = r4 * r2 # if k3 != 0.0 else 0
@@ -374,30 +376,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                     u = ((x_d + 1.0) / 2.0) * item.width
                     v = ((y_d + 1.0) / 2.0) * item.height
-
-                    # # Regular #
-                    #
-                    # x = x_px
-                    # y = y_px
-                    #
-                    # r = math.sqrt(x ** 2 + y ** 2)
-                    # r2 = (r ** 2) if k1 > 0 else 0
-                    # r4 = (r ** 4) if k2 > 0 else 0
-                    # r6 = (r ** 6) if k3 > 0 else 0
-                    # r8 = (r ** 8) if k4 > 0 else 0
-                    # r10 = (r ** 10) if k5 > 0 else 0
-                    # r12 = (r ** 12) if k6 > 0 else 0
-                    # r14 = (r ** 14) if k7 > 0 else 0
-                    # r16 = (r ** 16) if k8 > 0 else 0
-                    #
-                    # radial = 1 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
-                    #
-                    # x_distorted = x * radial + (2 * p1 * x * y + p2 * (r2 + 2 * x ** 2))
-                    # y_distorted = y * radial + (p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y)
-                    #
-                    # # Convert back to pixel coordinates
-                    # u = x_distorted
-                    # v = y_distorted
                 else:
                     # If no distortion, just use the projected pixel directly
                     u = x_px
@@ -445,7 +423,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 (4, 5), (5, 6), (6, 7), (7, 4),  # back face
                 (0, 4), (1, 5), (2, 6), (3, 7)  # connecting edges
             ]
-
 
             for start_idx, end_idx in edges:
                 pt1 = tuple(np.round(anno_2d[start_idx]).astype(int))
