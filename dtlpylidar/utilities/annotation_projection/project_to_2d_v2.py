@@ -140,13 +140,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
     # TODO: remove factor_m at the end
     def calculate_frame_annotations(self, annotation_data,
                                     frame_images, images_map, cameras_map,
-                                    factor_m,
+                                    factor_m, # TODO: Remove later
                                     full_annotations_only, apply_annotation_distortion, project_remotely):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
         :param annotation_data: annotation data from frame_annotations_per_frame
+        :param frame_images: images that correspond with the current frame number
+        :param images_map: map of image IDs to image paths
+        :param cameras_map: map of camera IDs to camera calibrations
         :param full_annotations_only: if True, only full annotations will be projected to 2D
+        :param apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
+        :param project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
         :return: None
         """
         # Cube annotation data geo
@@ -167,7 +172,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         for idx, image_calibrations in enumerate(frame_images):
             # get image and camera calibrations
             item_id = image_calibrations.get('image_id')
-            item: dl.Item = dl.items.get(item_id=item_id)
+            item = images_map[item_id]["item"]
             camera_id = image_calibrations.get('camera_id')
             camera_calibrations = cameras_map.get(camera_id)
             sensors_data = camera_calibrations.get('sensorsData')
@@ -336,7 +341,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 anno_points_2d = []
                 for annotation in annotations:
                     anno_points_2d.append(annotation.geo)
-                image_path = images_map.get(item_id)
+                image_path = images_map.get(item_id, dict()).get("path")
                 image = cv2.imread(image_path)
 
                 edges = [
@@ -412,6 +417,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         Function that projects annotations to 2D from the original lidar scene annotations.
         :param item: DL lidar scene item
         :param full_annotations_only: if True, only full annotations will be projected to 2D
+        :param project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
         :return: None
         """
         # TODO: Debug
@@ -456,12 +462,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
             cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
 
             images_map = {}
-            if project_remotely is False:
-                for idx, image_calibrations in enumerate(frame_images):
-                    # get image and camera calibrations
-                    item_id = image_calibrations.get('image_id')
-                    item = dl.items.get(item_id=item_id)
+            for idx, image_calibrations in enumerate(frame_images):
+                # get image and camera calibrations
+                item_id = image_calibrations.get('image_id')
+                item = dl.items.get(item_id=item_id)
+                images_map[item_id] = {
+                    "item": item
+                }
+                if project_remotely is True:
+                    images_map[item_id]["path"] = None
+                elif project_remotely is False:
                     image_path = str(os.path.join(frames_item.id, item.filename[1:]))
+                    images_map[item_id]["path"] = image_path
                     if not os.path.exists(image_path):
                         download_image_path = os.path.dirname(image_path)
                         item.download(local_path=download_image_path)
@@ -507,7 +519,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             # Save or display
                             cv2.imwrite(image_path, undistorted)
 
-                    images_map[item_id] = image_path
+                    images_map[item_id] = {
+                        "item": item,
+                        "path": image_path,
+                    }
+                else:
+                    raise ValueError("project_remotely must be either True or False.")
 
             frame_annotations = frame_annotations_per_frame.get(frame_num, list())
             for annotation_data in tqdm(frame_annotations):
