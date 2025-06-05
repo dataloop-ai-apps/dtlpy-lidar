@@ -200,8 +200,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
         """
         apply_image_undistortion = False
         apply_annotation_distortion = True
-        # factor_m = -150.0
-        factor_m = 1
+        factor_m = -150.0
+        # factor_m = 1
 
         # calculate 3D cube points from annotation (PCD normalized)
         points = transformations.calc_cuboid_corners(
@@ -350,19 +350,22 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     y = (y_px / item.height) * 2.0 - 1.0
 
                     r = math.sqrt(x ** 2 + y ** 2) / r0
-                    r2 = (r ** 2) if k1 != 0.0 else 0
-                    r4 = (r ** 4) if k2 != 0.0 else 0
-                    r6 = (r ** 6) if k3 != 0.0 else 0
-                    r8 = (r ** 8) if k4 != 0.0 else 0
-                    r10 = (r ** 10) if k5 != 0.0 else 0
-                    r12 = (r ** 12) if k6 != 0.0 else 0
-                    r14 = (r ** 14) if k7 != 0.0 else 0
-                    r16 = (r ** 16) if k8 != 0.0 else 0
+                    r2 = r * r # if k1 != 0.0 else 0
+                    r4 = r2 * r2 # if k2 != 0.0 else 0
+                    r6 = r4 * r2 # if k3 != 0.0 else 0
+                    r8 = r6 * r2 # if k4 != 0.0 else 0
+                    r10 = r8 * r2 # if k5 != 0.0 else 0
+                    r12 = r10 * r2 # if k6 != 0.0 else 0
+                    r14 = r12 * r2 # if k7 != 0.0 else 0
+                    r16 = r14 * r2 # if k8 != 0.0 else 0
 
                     radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
 
-                    x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x ** 2))
-                    y_d = y * radial + (p1 * (r2 + 2.0 * y ** 2) + 2.0 * p2 * x * y)
+                    x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
+                    y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+
+                    x_d = np.clip(x_d, -1.0, 1.0)
+                    y_d = np.clip(y_d, -1.0, 1.0)
 
                     # Convert back to pixel coordinates
                     # u = fx * x_d + s * y_d + cx
@@ -445,8 +448,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 
             for start_idx, end_idx in edges:
-                pt1 = tuple(np.round(points_2d[start_idx]).astype(int))
-                pt2 = tuple(np.round(points_2d[end_idx]).astype(int))
+                pt1 = tuple(np.round(anno_2d[start_idx]).astype(int))
+                pt2 = tuple(np.round(anno_2d[end_idx]).astype(int))
                 color = self.labels_colors.get(label, (255, 255, 255))  # Default color is white if label not found
                 cv2.line(image, pt1, pt2, color=color, thickness=2)
             cv2.imwrite(image_path, image)
@@ -569,7 +572,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '67c57bf4285285fc27ff14d8'
+    item_id = '68415b9d1bd0d57f611190a1'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
