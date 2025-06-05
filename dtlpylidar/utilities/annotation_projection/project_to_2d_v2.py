@@ -138,17 +138,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
         }
 
     # TODO: remove factor_m at the end
-    def calculate_frame_annotations(self, annotation_data, images_map, factor_m,
-                                    lidar_video_content, camera_calibrations, frame_num,
+    def calculate_frame_annotations(self, annotation_data,
+                                    frame_images, images_map, cameras_map,
+                                    factor_m,
                                     full_annotations_only, apply_annotation_distortion, project_remotely):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
         :param annotation_data: annotation data from frame_annotations_per_frame
-        :param lidar_video_content: lidar scene video as json
-        :param camera_calibrations: camera calibrations
         :param full_annotations_only: if True, only full annotations will be projected to 2D
-        :param frame_num:
         :return: None
         """
         # Cube annotation data geo
@@ -164,10 +162,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
             rotation=annotation_rotation,
             position=annotation_translation
         )
-
-        # get all images of relevant frame
-        frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
-        cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
 
         # iterate over images that correspond with frame
         for idx, image_calibrations in enumerate(frame_images):
@@ -519,11 +513,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
             for annotation_data in tqdm(frame_annotations):
                 self.calculate_frame_annotations(
                     annotation_data=annotation_data,
+                    frame_images=frame_images,
                     images_map=images_map,
+                    cameras_map=cameras_map,
                     factor_m=factor_m,  # TODO: Remove later
-                    lidar_video_content=lidar_video_content,
-                    camera_calibrations=camera_calibrations,
-                    frame_num=frame_num,
                     full_annotations_only=full_annotations_only,
                     apply_annotation_distortion=apply_annotation_distortion,
                     project_remotely=project_remotely
