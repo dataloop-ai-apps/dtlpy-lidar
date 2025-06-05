@@ -76,12 +76,12 @@ class Distortion:
         # Extended distortion parameters
         extended_distortion_keys = ['k4', 'k5', 'k6', 'k7', 'k8']
         for key in extended_distortion_keys:
-            if getattr(self, key, __default=0.0) != 0.0:
+            if getattr(self, key, 0.0) != 0.0:
                 distortion_json[key] = getattr(self, key)
         # Extended scale parameters
         extended_scale_keys = ['r0', 'm']
         for key in extended_scale_keys:
-            if getattr(self, key, __default=1.0) != 1.0:
+            if getattr(self, key, 1.0) != 1.0:
                 distortion_json[key] = getattr(self, key)
         return distortion_json
 
