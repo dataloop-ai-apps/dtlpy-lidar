@@ -23,28 +23,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             for label_name, label_data in dataset.labels_flat_dict.items():
                 self.labels_colors[label_name] = hex_to_bgr(label_data.color)
 
-    @staticmethod
-    def check_boundaries(width, height, x, y):
-        """
-        Move point to boundaries if it is outside the image boundaries
-        :param width: image width
-        :param height: image height
-        :param x: point x coordinate
-        :param y: point y coordinate
-        :return: x, y coordinates of the point after moving it to the boundaries if it was outside the image boundaries
-        """
-        # TODO: handaled in distortion part
-        # if x < 0:
-        #     x = 0
-        # if x > width:
-        #     x = width
-        # if y < 0:
-        #     y = 0
-        # if y > height:
-        #     y = height
-        return x, y
-
-    def create_annotation(self, label, annotation_pixels, width, height, full_annotations_only):
+    def create_annotation(self, option, label, annotation_pixels, depths, width, height, full_annotations_only):
         """
         Create annotation from 3D cube 8 points projected on 2D image.
         :param label: annotation label
@@ -68,96 +47,95 @@ class AnnotationProjection(dl.BaseServiceRunner):
         if not (counter >= min_threshold):
             return None
 
-        # move points to boundaries if they are outside the image boundaries
-        front_tl = self.check_boundaries(width=width,
-                                         height=height,
-                                         x=annotation_pixels[2][0],
-                                         y=annotation_pixels[2][1])
-        front_tr = self.check_boundaries(width=width,
-                                         height=height,
-                                         x=annotation_pixels[3][0],
-                                         y=annotation_pixels[3][1])
-        front_bl = self.check_boundaries(width=width,
-                                         height=height,
-                                         x=annotation_pixels[0][0],
-                                         y=annotation_pixels[0][1])
-        front_br = self.check_boundaries(width=width,
-                                         height=height,
-                                         x=annotation_pixels[1][0],
-                                         y=annotation_pixels[1][1])
-        back_tl = self.check_boundaries(width=width,
-                                        height=height,
-                                        x=annotation_pixels[6][0],
-                                        y=annotation_pixels[6][1])
-        back_tr = self.check_boundaries(width=width,
-                                        height=height,
-                                        x=annotation_pixels[7][0],
-                                        y=annotation_pixels[7][1])
-        back_bl = self.check_boundaries(width=width,
-                                        height=height,
-                                        x=annotation_pixels[4][0],
-                                        y=annotation_pixels[4][1])
-        back_br = self.check_boundaries(width=width,
-                                        height=height,
-                                        x=annotation_pixels[5][0],
-                                        y=annotation_pixels[5][1])
+        front_indices = np.argsort(depths)[:4]
+        back_indices = np.argsort(depths)[4:]
 
-        # points_dict = {
-        #     "front_tl": front_tl,
-        #     "front_tr": front_tr,
-        #     "front_bl": front_bl,
-        #     "front_br": front_br,
-        #     "back_tl": back_tl,
-        #     "back_tr": back_tr,
-        #     "back_bl": back_bl,
-        #     "back_br": back_br
-        # }
+        front_points = annotation_pixels[front_indices]
+        back_points = annotation_pixels[back_indices]
 
-        # # create cube annotation
-        # cube = dl.Cube(label=label,
-        #                front_tl=front_tl,
-        #                front_tr=front_tr,
-        #                front_br=front_br,
-        #                front_bl=front_bl,
-        #                back_tl=back_tl,
-        #                back_tr=back_tr,
-        #                back_br=back_br,
-        #                back_bl=back_bl)
-        # return [cube]
+        front = self.sort_face(front_points)
+        back = self.sort_face(back_points)
 
-        # create polygons annotation
-        # polygon1 = dl.Polygon(
-        #     geo=[
-        #         [front_tl[0], front_tl[1]],  # front top left
-        #         [front_tr[0], front_tr[1]],  # front top right
-        #         [front_br[0], front_br[1]],  # front bottom right
-        #         [front_bl[0], front_bl[1]],  # front bottom left
-        #     ],
-        #     label=label
-        # )
-        # polygon2 = dl.Polygon(
-        #     geo=[
-        #         [back_tl[0], back_tl[1]],    # back top left
-        #         [back_tr[0], back_tr[1]],    # back top right
-        #         [back_br[0], back_br[1]],    # back bottom right
-        #         [back_bl[0], back_bl[1]]     # back bottom left
-        #     ],
-        #     label=label
-        # )
-        # return [polygon1, polygon2]
+        # Assign
+        front_tl = front["tl"]
+        front_tr = front["tr"]
+        front_br = front["br"]
+        front_bl = front["bl"]
 
-        # create points annotation
-        points = [
-            dl.Point(x=front_tl[0], y=front_tl[1], label=label),  # front top left
-            dl.Point(x=front_tr[0], y=front_tr[1], label=label),  # front top right
-            dl.Point(x=front_br[0], y=front_br[1], label=label),  # front bottom right
-            dl.Point(x=front_bl[0], y=front_bl[1], label=label),  # front bottom left
-            dl.Point(x=back_tl[0], y=back_tl[1], label=label),    # back top left
-            dl.Point(x=back_tr[0], y=back_tr[1], label=label),    # back top right
-            dl.Point(x=back_br[0], y=back_br[1], label=label),    # back bottom right
-            dl.Point(x=back_bl[0], y=back_bl[1], label=label)     # back bottom left
-        ]
-        return points
+        back_tl = back["tl"]
+        back_tr = back["tr"]
+        back_br = back["br"]
+        back_bl = back["bl"]
+
+        if option == "Cube":
+            # create cube annotation
+            cube = dl.Cube(label=label,
+                           front_tl=front_tl,
+                           front_tr=front_tr,
+                           front_br=front_br,
+                           front_bl=front_bl,
+                           back_tl=back_tl,
+                           back_tr=back_tr,
+                           back_br=back_br,
+                           back_bl=back_bl)
+            return [cube]
+
+        elif option == "Polygons":
+            # create polygons annotation
+            polygon1 = dl.Polygon(
+                geo=[
+                    [front_tl[0], front_tl[1]],  # front top left
+                    [front_tr[0], front_tr[1]],  # front top right
+                    [front_br[0], front_br[1]],  # front bottom right
+                    [front_bl[0], front_bl[1]],  # front bottom left
+                ],
+                label=label
+            )
+            polygon2 = dl.Polygon(
+                geo=[
+                    [back_tl[0], back_tl[1]],    # back top left
+                    [back_tr[0], back_tr[1]],    # back top right
+                    [back_br[0], back_br[1]],    # back bottom right
+                    [back_bl[0], back_bl[1]]     # back bottom left
+                ],
+                label=label
+            )
+            return [polygon1, polygon2]
+        elif option == "Points":
+            # create points annotation
+            points = [
+                dl.Point(x=front_tl[0], y=front_tl[1], label=label),  # front top left
+                dl.Point(x=front_tr[0], y=front_tr[1], label=label),  # front top right
+                dl.Point(x=front_br[0], y=front_br[1], label=label),  # front bottom right
+                dl.Point(x=front_bl[0], y=front_bl[1], label=label),  # front bottom left
+                dl.Point(x=back_tl[0], y=back_tl[1], label=label),    # back top left
+                dl.Point(x=back_tr[0], y=back_tr[1], label=label),    # back top right
+                dl.Point(x=back_br[0], y=back_br[1], label=label),    # back bottom right
+                dl.Point(x=back_bl[0], y=back_bl[1], label=label)     # back bottom left
+            ]
+            return points
+        else:
+            raise ValueError(f"Unsupported option: {option}. Supported options are 'Cube', 'Polygons', and 'Points'.")
+
+    @staticmethod
+    def sort_face(points_4):
+        # points_4: (4, 2) array
+        points_4 = np.array(points_4)
+        sorted_by_y = points_4[np.argsort(points_4[:, 1])]  # sort top to bottom
+
+        top_two = sorted_by_y[:2]
+        bottom_two = sorted_by_y[2:]
+
+        # now sort left/right within top and bottom
+        tl, tr = top_two[np.argsort(top_two[:, 0])]
+        bl, br = bottom_two[np.argsort(bottom_two[:, 0])]
+
+        return {
+            "tl": tuple(tl),
+            "tr": tuple(tr),
+            "br": tuple(br),
+            "bl": tuple(bl)
+        }
 
     # TODO: remove factor_m at the end
     def calculate_frame_annotations(self, annotation_data, images_map, factor_m,
@@ -252,26 +230,24 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             mvp = projection_matrix @ view_matrix @ model_matrix
             points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-            projected_points = (mvp @ points_homogeneous.T).T  # (N, 4)
-            projected_points = projected_points[:, :3] / np.abs(projected_points[:, 3:4])  # (N, 3)
-            projected_pixels = projected_points[:, :2] / np.abs(projected_points[:, 2:3])  # (N, 2)
+            points_4d = (mvp @ points_homogeneous.T).T  # (N, 4)
+            points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+            points_2d = points_3d[:, :2] / np.abs(points_3d[:, 2:3])  # (N, 2)
 
             # DISTORTION
 
-            points_2d = []
-            for projected_pixel in projected_pixels:
-                x_px, y_px = projected_pixel
+            annotation_pixels = []
+            for point_2d in points_2d:
+                x_px, y_px = point_2d
+
+                # Normalize to camera coordinates
+                # x = (x_px - cx) / fx
+                # y = (y_px - cy) / fy
+
+                x = (x_px / item.width) * 2.0 - 1.0
+                y = (y_px / item.height) * 2.0 - 1.0
 
                 if apply_annotation_distortion:
-                    # Normalized #
-
-                    # Normalize to camera coordinates
-                    # x = (x_px - cx) / fx
-                    # y = (y_px - cy) / fy
-
-                    x = (x_px / item.width) * 2.0 - 1.0
-                    y = (y_px / item.height) * 2.0 - 1.0
-
                     r = math.sqrt(x * x + y * y) / r0
                     r2 = r * r # if k1 != 0.0 else 0
                     r4 = r2 * r2 # if k2 != 0.0 else 0
@@ -289,20 +265,22 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                     x_d = np.clip(x_d, -1.0, 1.0)
                     y_d = np.clip(y_d, -1.0, 1.0)
-
-                    # Convert back to pixel coordinates
-                    # u = fx * x_d + s * y_d + cx
-                    # u = fx * x_d + cx
-                    # v = fy * y_d + cy
-
-                    u = ((x_d + 1.0) / 2.0) * item.width
-                    v = ((y_d + 1.0) / 2.0) * item.height
                 else:
                     # If no distortion, just use the projected pixel directly
-                    u = x_px
-                    v = y_px
+                    x_d = x
+                    y_d = y
 
-                points_2d.append([u, v])
+                # Convert back to pixel coordinates
+                # u = fx * x_d + s * y_d + cx
+                # u = fx * x_d + cx
+                # v = fy * y_d + cy
+
+                u = ((x_d + 1.0) / 2.0) * item.width
+                v = ((y_d + 1.0) / 2.0) * item.height
+
+                annotation_pixels.append([u, v])
+
+            annotation_pixels = np.array(annotation_pixels)
 
             # OPENCV projection
 
@@ -321,10 +299,23 @@ class AnnotationProjection(dl.BaseServiceRunner):
             # points_2d = points_2d.reshape(-1, 2)  # (N, 2)
 
 
-            # create cube annotation if it is inside the image boundaries
+            if project_remotely:
+                if apply_annotation_distortion:
+                    option = "Polygons"
+                else:
+                    option = "Cube"
+            else:
+                option = "Points"
+
+            # Find Front and Back points (Front = points with smaller Z - closer to camera)
+            depths = points_3d[:, 2]  # Camera-space Z
+
+            # create annotation if it is inside the image boundaries
             annotations = self.create_annotation(
+                option=option,
                 label=annotation_data["label"],
-                annotation_pixels=points_2d,
+                annotation_pixels=annotation_pixels,
+                depths=depths,
                 width=item.width,
                 height=item.height,
                 full_annotations_only=full_annotations_only
