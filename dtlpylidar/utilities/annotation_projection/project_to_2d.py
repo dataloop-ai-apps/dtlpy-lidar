@@ -251,6 +251,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     k3 = camera_distortion["k3"]
                     p1 = camera_distortion["p1"]
                     p2 = camera_distortion["p2"]
+                    # factor_m = camera_distortion.get('m', 1.0)
                     D = factor_m * np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
 
                     # Original distorted image
@@ -272,7 +273,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         for idx, image_calibrations in enumerate(frame_images):
             # get image and camera calibrations
             item_id = image_calibrations.get('image_id')
-            item = dl.items.get(item_id=item_id)
+            item: dl.Item = dl.items.get(item_id=item_id)
             camera_id = image_calibrations.get('camera_id')
             camera_calibrations = cameras_map.get(camera_id)
             sensors_data = camera_calibrations.get('sensorsData')
@@ -301,17 +302,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
             intrinsic_data = sensors_data.get('intrinsicData', dict())
             fx = intrinsic_data.get('fx', 1.0)
             fy = intrinsic_data.get('fy', 1.0)
-            s = intrinsic_data.get('skew', 0.0)
             cx = intrinsic_data.get('cx', 0.0)
             cy = intrinsic_data.get('cy', 0.0)
+            skew = intrinsic_data.get('skew', 0.0)
             projection_matrix = np.array([
-                [fx, s , cx, 0],
-                [0 , fy, cy, 0],
-                [0 , 0 , 1 , 0],
-                [0 , 0 , 0 , 1]
+                [fx, skew, cx, 0],
+                [0 , fy  , cy, 0],
+                [0 , 0   , 1 , 0],
+                [0 , 0   , 0 , 1]
             ])
 
             camera_distortion = intrinsic_data.get('distortion', dict())
+            # factor_m = camera_distortion.get('m', 1.0)
             k1 = camera_distortion["k1"] * factor_m
             k2 = camera_distortion["k2"] * factor_m
             k3 = camera_distortion["k3"] * factor_m
@@ -339,8 +341,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     # Normalized #
 
                     # Normalize to camera coordinates
-                    x = (x_px - cx) / fx
-                    y = (y_px - cy) / fy
+                    # x = (x_px - cx) / fx
+                    # y = (y_px - cy) / fy
+
+                    x = (x_px / item.width) * 2.0 - 1.0
+                    y = (y_px / item.height) * 2.0 - 1.0
 
                     r = math.sqrt(x ** 2 + y ** 2) / r0
                     r2 = (r ** 2) if k1 != 0.0 else 0
@@ -359,8 +364,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                     # Convert back to pixel coordinates
                     # u = fx * x_d + s * y_d + cx
-                    u = fx * x_d + cx
-                    v = fy * y_d + cy
+                    # u = fx * x_d + cx
+                    # v = fy * y_d + cy
+
+                    u = ((x_d + 1.0) / 2.0) * item.width
+                    v = ((y_d + 1.0) / 2.0) * item.height
 
                     # # Regular #
                     #
@@ -554,7 +562,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '683f24e48b8ed565b78dcdbd'
+    item_id = '68415b9d1bd0d57f611190a1'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
 
