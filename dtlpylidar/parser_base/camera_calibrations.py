@@ -65,23 +65,24 @@ class Distortion:
         Distortion object to dict
         :return:
         """
-        # Basic distortion parameters
+        # Basic radial distortion parameters
         distortion_json = {
             'k1': self.k1,
             'k2': self.k2,
-            'k3': self.k3,
-            'p1': self.p1,
-            'p2': self.p2
+            'k3': self.k3
         }
-        # Extended distortion parameters
+        # Extended radial distortion parameters
         extended_distortion_keys = ['k4', 'k5', 'k6', 'k7', 'k8']
         for key in extended_distortion_keys:
-            if getattr(self, key, __default=0.0) != 0.0:
+            if getattr(self, key, 0.0) != 0.0:
                 distortion_json[key] = getattr(self, key)
+        # Tangential distortion parameters
+        distortion_json['p1'] = self.p1
+        distortion_json['p2'] = self.p2
         # Extended scale parameters
         extended_scale_keys = ['r0', 'm']
         for key in extended_scale_keys:
-            if getattr(self, key, __default=1.0) != 1.0:
+            if getattr(self, key, 1.0) != 1.0:
                 distortion_json[key] = getattr(self, key)
         return distortion_json
 
