@@ -24,27 +24,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 self.labels_colors[label_name] = hex_to_bgr(label_data.color)
 
     @staticmethod
-    def get_annotation_metrics(geo):
-        """
-        Get annotation metrics from geo
-        :param geo:
-        :return: annotation translation, rotation and scale
-        """
-        return list(geo[0]), list(geo[1]), list(geo[2])
-
-    @staticmethod
-    def get_metrics_snapshot(data):
-        """
-        Get annotation metrics from snapshot
-        :param data: snapshot dictionary
-        :return: annotation translation, rotation and scale
-        """
-        translation = [data.get('position').get('x'), data.get('position').get('y'), data.get('position').get('z')]
-        rotation = [data.get('rotation').get('x'), data.get('rotation').get('y'), data.get('rotation').get('z')]
-        scale = [data.get('scale').get('x'), data.get('scale').get('y'), data.get('scale').get('z')]
-        return translation, scale, rotation
-
-    @staticmethod
     def check_boundaries(width, height, x, y):
         """
         Move point to boundaries if it is outside the image boundaries
@@ -54,14 +33,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param y: point y coordinate
         :return: x, y coordinates of the point after moving it to the boundaries if it was outside the image boundaries
         """
-        if x < 0:
-            x = 0
-        if x > width:
-            x = width
-        if y < 0:
-            y = 0
-        if y > height:
-            y = height
+        # TODO: handaled in distortion part
+        # if x < 0:
+        #     x = 0
+        # if x > width:
+        #     x = width
+        # if y < 0:
+        #     y = 0
+        # if y > height:
+        #     y = height
         return x, y
 
     def create_annotation(self, label, annotation_pixels, width, height, full_annotations_only):
@@ -182,7 +162,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
     # TODO: remove factor_m at the end
     def calculate_frame_annotations(self, annotation_data, images_map, factor_m,
                                     lidar_video_content, camera_calibrations, frame_num,
-                                    full_annotations_only, apply_annotation_distortion):
+                                    full_annotations_only, apply_annotation_distortion, project_remotely):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
@@ -193,9 +173,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param frame_num:
         :return: None
         """
-        annotation_translation, annotation_scale, annotation_rotation = self.get_annotation_metrics(
-            geo=annotation_data["geo"]
-        )
+        # Cube annotation data geo
+        annotation_translation = annotation_data["geo"][0]
+        annotation_scale = annotation_data["geo"][1]
+        annotation_rotation = annotation_data["geo"][2]
 
         # calculate 3D cube points from annotation (PCD normalized)
         points = transformations.calc_cuboid_corners(
@@ -272,6 +253,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             mvp = projection_matrix @ view_matrix @ model_matrix
             points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
             projected_points = (mvp @ points_homogeneous.T).T  # (N, 4)
+            projected_points = projected_points[:, :3] / np.abs(projected_points[:, 3:4])  # (N, 3)
             projected_pixels = projected_points[:, :2] / np.abs(projected_points[:, 2:3])  # (N, 2)
 
             # DISTORTION
@@ -351,36 +333,40 @@ class AnnotationProjection(dl.BaseServiceRunner):
             if annotations is None:
                 continue
 
-            anno_2d = []
-            for annotation in annotations:
-                anno_2d.append(annotation.geo)
-            image_path = images_map.get(item_id)
-            image = cv2.imread(image_path)
+            if project_remotely is True:
+                # TODO: TBD - aggregated same image annotations and upload in one go
 
-            edges = [
-                (0, 1), (1, 2), (2, 3), (3, 0),  # front face
-                (4, 5), (5, 6), (6, 7), (7, 4),  # back face
-                (0, 4), (1, 5), (2, 6), (3, 7)  # connecting edges
-            ]
+                # create annotation builder
+                builder = item.annotations.builder()
+                # add annotation to the item
+                for annotation in annotations:
+                    builder.add(
+                        annotation_definition=annotation,
+                        object_id=annotation_data["object_id"],
+                        object_visible=annotation_data["object_visible"]
+                    )
+                # upload annotation to the item
+                item.annotations.upload(builder)
+            else:
+                anno_points_2d = []
+                for annotation in annotations:
+                    anno_points_2d.append(annotation.geo)
+                image_path = images_map.get(item_id)
+                image = cv2.imread(image_path)
 
-            for start_idx, end_idx in edges:
-                pt1 = tuple(np.round(anno_2d[start_idx]).astype(int))
-                pt2 = tuple(np.round(anno_2d[end_idx]).astype(int))
-                color = self.labels_colors.get(annotation_data["label"], (255, 255, 255))  # Default color is white if label not found
-                cv2.line(image, pt1, pt2, color=color, thickness=2)
-            cv2.imwrite(image_path, image)
+                edges = [
+                    (0, 1), (1, 2), (2, 3), (3, 0),  # front face
+                    (4, 5), (5, 6), (6, 7), (7, 4),  # back face
+                    (0, 4), (1, 5), (2, 6), (3, 7)  # connecting edges
+                ]
 
-            # # create annotation builder
-            # builder = item.annotations.builder()
-            # # add annotation to the item
-            # for annotation in annotations:
-            #     builder.add(
-            #         annotation_definition=annotation,
-            #         object_id=annotation_data["object_id"],
-            #         object_visible=annotation_data["object_visible"]
-            #     )
-            # # upload annotation to the item
-            # item.annotations.upload(builder)
+                for start_idx, end_idx in edges:
+                    pt1 = tuple(np.round(anno_points_2d[start_idx]).astype(int))
+                    pt2 = tuple(np.round(anno_points_2d[end_idx]).astype(int))
+                    color = self.labels_colors.get(annotation_data["label"], (255, 255, 255))  # Default color is white if label not found
+                    cv2.line(image, pt1, pt2, color=color, thickness=2)
+                cv2.imwrite(image_path, image)
+
 
     @staticmethod
     def build_frame_annotations_per_frame_mapping(lidar_video_content, annotations):
@@ -388,7 +374,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         frames_count = len(lidar_video_content.get('frames', list()))
         annotation: dl.Annotation
         frame_annotations_per_frame = {frame_number: list() for frame_number in range(frames_count)}
-        for annotation in tqdm(annotations):
+        for annotation in annotations:
             start_frame = annotation.metadata.get('system', dict()).get('frame')
             end_frame = annotation.metadata.get('system', dict()).get('endFrame')
             snapshots = annotation.metadata.get('system', dict()).get('snapshots_', list())
@@ -434,7 +420,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         return frame_annotations_per_frame
 
-    def project_annotations_to_2d(self, item: dl.Item, full_annotations_only: bool = False):
+    def project_annotations_to_2d(self, item: dl.Item,
+                                  full_annotations_only: bool = False,
+                                  project_remotely: bool = True):
         """
         Function that projects annotations to 2D from the original lidar scene annotations.
         :param item: DL lidar scene item
@@ -467,71 +455,77 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         # get all camera calibrations
         camera_calibrations = lidar_video_content.get('cameras', list())
-
         frames_count = len(lidar_video_content.get('frames', list()))
-        for frame_num in tqdm(range(frames_count)):
+        for frame_num in range(frames_count):
+            print("Frame number:", frame_num)
+
+            # TODO: Debug
+            if frame_num != 0:
+                exit()
+
             #################
             # Handle Images #
             #################
 
             frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
             cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
+
             images_map = {}
-            for idx, image_calibrations in enumerate(frame_images):
-                # get image and camera calibrations
-                item_id = image_calibrations.get('image_id')
-                item = dl.items.get(item_id=item_id)
-                image_path = str(os.path.join(frames_item.id, item.filename[1:]))
-                if not os.path.exists(image_path):
-                    download_image_path = os.path.dirname(image_path)
-                    item.download(local_path=download_image_path)
+            if project_remotely is False:
+                for idx, image_calibrations in enumerate(frame_images):
+                    # get image and camera calibrations
+                    item_id = image_calibrations.get('image_id')
+                    item = dl.items.get(item_id=item_id)
+                    image_path = str(os.path.join(frames_item.id, item.filename[1:]))
+                    if not os.path.exists(image_path):
+                        download_image_path = os.path.dirname(image_path)
+                        item.download(local_path=download_image_path)
 
-                    # Remove distortion from image
-                    if apply_image_undistortion:
-                        camera_id = image_calibrations.get('camera_id')
-                        camera_calibrations = cameras_map.get(camera_id)
-                        sensors_data = camera_calibrations.get('sensorsData')
+                        # Remove distortion from image
+                        if apply_image_undistortion:
+                            camera_id = image_calibrations.get('camera_id')
+                            camera_calibrations = cameras_map.get(camera_id)
+                            sensors_data = camera_calibrations.get('sensorsData')
 
-                        # calculate projection matrix (Default values: Orthographic projection)
-                        intrinsic_data = sensors_data.get('intrinsicData', dict())
-                        fx = intrinsic_data.get('fx', 1.0)
-                        fy = intrinsic_data.get('fy', 1.0)
-                        s = intrinsic_data.get('skew', 0.0)
-                        cx = intrinsic_data.get('cx', 0.0)
-                        cy = intrinsic_data.get('cy', 0.0)
-                        K = np.array([
-                            [fx, s, cx],
-                            [0, fy, cy],
-                            [0, 0, 1]
-                        ])
+                            # calculate projection matrix (Default values: Orthographic projection)
+                            intrinsic_data = sensors_data.get('intrinsicData', dict())
+                            fx = intrinsic_data.get('fx', 1.0)
+                            fy = intrinsic_data.get('fy', 1.0)
+                            s = intrinsic_data.get('skew', 0.0)
+                            cx = intrinsic_data.get('cx', 0.0)
+                            cy = intrinsic_data.get('cy', 0.0)
+                            K = np.array([
+                                [fx, s, cx],
+                                [0, fy, cy],
+                                [0, 0, 1]
+                            ])
 
-                        camera_distortion = intrinsic_data.get('distortion', dict())
-                        k1 = camera_distortion["k1"]
-                        k2 = camera_distortion["k2"]
-                        k3 = camera_distortion["k3"]
-                        p1 = camera_distortion["p1"]
-                        p2 = camera_distortion["p2"]
-                        # factor_m = camera_distortion.get('m', 1.0)
-                        D = factor_m * np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
+                            camera_distortion = intrinsic_data.get('distortion', dict())
+                            k1 = camera_distortion["k1"]
+                            k2 = camera_distortion["k2"]
+                            k3 = camera_distortion["k3"]
+                            p1 = camera_distortion["p1"]
+                            p2 = camera_distortion["p2"]
+                            # factor_m = camera_distortion.get('m', 1.0)
+                            D = factor_m * np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
 
-                        # Original distorted image
-                        image = cv2.imread(image_path)
-                        h, w = image.shape[:2]
+                            # Original distorted image
+                            image = cv2.imread(image_path)
+                            h, w = image.shape[:2]
 
-                        # Compute optimal rectified camera matrix (keeps FOV)
-                        new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
+                            # Compute optimal rectified camera matrix (keeps FOV)
+                            new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
 
-                        # Undistort
-                        undistorted = cv2.undistort(image, K, D, None, new_K)
+                            # Undistort
+                            undistorted = cv2.undistort(image, K, D, None, new_K)
 
-                        # Save or display
-                        cv2.imwrite(image_path, undistorted)
+                            # Save or display
+                            cv2.imwrite(image_path, undistorted)
 
-                images_map[item_id] = image_path
+                    images_map[item_id] = image_path
 
             frame_annotations = frame_annotations_per_frame.get(frame_num, list())
-            for annotation_data in frame_annotations:
-
+            for annotation_data in tqdm(frame_annotations):
                 self.calculate_frame_annotations(
                     annotation_data=annotation_data,
                     images_map=images_map,
@@ -540,7 +534,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     camera_calibrations=camera_calibrations,
                     frame_num=frame_num,
                     full_annotations_only=full_annotations_only,
-                    apply_annotation_distortion=apply_annotation_distortion
+                    apply_annotation_distortion=apply_annotation_distortion,
+                    project_remotely=project_remotely
                 )
 
 
@@ -550,6 +545,11 @@ if __name__ == "__main__":
     item_id = '68415b9d1bd0d57f611190a1'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
+    project_remotely = False
 
     runner = AnnotationProjection(dataset=frames_item.dataset)
-    runner.project_annotations_to_2d(item=frames_item, full_annotations_only=full_annotations_only)
+    runner.project_annotations_to_2d(
+        item=frames_item,
+        full_annotations_only=full_annotations_only,
+        project_remotely=project_remotely
+    )
