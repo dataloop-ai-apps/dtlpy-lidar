@@ -170,8 +170,8 @@ class CustomBaseParser(dl.BaseServiceRunner):
 
                 camera_id = f"{camera_folder}_frame_{camera_frame_idx}"
                 camera_intrinsic = camera_calibrations.Intrinsic(
-                    fx=intrinsics_json_data.get("fx", 0),
-                    fy=intrinsics_json_data.get("fy", 0),
+                    fx=intrinsics_json_data.get("fx", 1),
+                    fy=intrinsics_json_data.get("fy", 1),
                     cx=intrinsics_json_data.get("cx", 0),
                     cy=intrinsics_json_data.get("cy", 0)
                 )
