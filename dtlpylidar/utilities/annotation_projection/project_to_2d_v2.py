@@ -154,6 +154,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
         :return: None
         """
+        projection_mode = "OpenCV" # "Manual" or "OpenCV"
+
         # Cube annotation data geo
         annotation_translation = annotation_data["geo"][0]
         annotation_scale = annotation_data["geo"][1]
@@ -225,78 +227,90 @@ class AnnotationProjection(dl.BaseServiceRunner):
             p2 = camera_distortion["p2"] * factor_m
             r0 = camera_distortion.get('r0', 1.0)
 
-            # MVP
+            # Manual MVP
+            if projection_mode == "Manual":
+                mvp = projection_matrix @ view_matrix @ model_matrix
+                points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+                points_4d = (mvp @ points_homogeneous.T).T  # (N, 4)
+                points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+                points_2d = points_3d[:, :2] / np.abs(points_3d[:, 2:3])  # (N, 2)
 
-            mvp = projection_matrix @ view_matrix @ model_matrix
-            points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-            points_4d = (mvp @ points_homogeneous.T).T  # (N, 4)
-            points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
-            points_2d = points_3d[:, :2] / np.abs(points_3d[:, 2:3])  # (N, 2)
+                # Distortion
 
-            # DISTORTION
+                annotation_pixels = []
+                for point_2d in points_2d:
+                    x_px, y_px = point_2d
 
-            annotation_pixels = []
-            for point_2d in points_2d:
-                x_px, y_px = point_2d
+                    # Normalize to camera coordinates
+                    # x = (x_px - cx) / fx
+                    # y = (y_px - cy) / fy
 
-                # Normalize to camera coordinates
-                # x = (x_px - cx) / fx
-                # y = (y_px - cy) / fy
+                    x = (x_px / item.width) * 2.0 - 1.0
+                    y = (y_px / item.height) * 2.0 - 1.0
 
-                x = (x_px / item.width) * 2.0 - 1.0
-                y = (y_px / item.height) * 2.0 - 1.0
+                    if apply_annotation_distortion:
+                        r = math.sqrt(x * x + y * y) / r0
+                        r2 = r * r # if k1 != 0.0 else 0
+                        r4 = r2 * r2 # if k2 != 0.0 else 0
+                        r6 = r4 * r2 # if k3 != 0.0 else 0
+                        r8 = r6 * r2 # if k4 != 0.0 else 0
+                        r10 = r8 * r2 # if k5 != 0.0 else 0
+                        r12 = r10 * r2 # if k6 != 0.0 else 0
+                        r14 = r12 * r2 # if k7 != 0.0 else 0
+                        r16 = r14 * r2 # if k8 != 0.0 else 0
 
-                if apply_annotation_distortion:
-                    r = math.sqrt(x * x + y * y) / r0
-                    r2 = r * r # if k1 != 0.0 else 0
-                    r4 = r2 * r2 # if k2 != 0.0 else 0
-                    r6 = r4 * r2 # if k3 != 0.0 else 0
-                    r8 = r6 * r2 # if k4 != 0.0 else 0
-                    r10 = r8 * r2 # if k5 != 0.0 else 0
-                    r12 = r10 * r2 # if k6 != 0.0 else 0
-                    r14 = r12 * r2 # if k7 != 0.0 else 0
-                    r16 = r14 * r2 # if k8 != 0.0 else 0
+                        radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
 
-                    radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                        x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
+                        y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
 
-                    x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                    y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+                        x_d = np.clip(x_d, -1.0, 1.0)
+                        y_d = np.clip(y_d, -1.0, 1.0)
+                    else:
+                        # If no distortion, just use the projected pixel directly
+                        x_d = x
+                        y_d = y
 
-                    x_d = np.clip(x_d, -1.0, 1.0)
-                    y_d = np.clip(y_d, -1.0, 1.0)
-                else:
-                    # If no distortion, just use the projected pixel directly
-                    x_d = x
-                    y_d = y
+                    # Convert back to pixel coordinates
+                    # u = fx * x_d + s * y_d + cx
+                    # u = fx * x_d + cx
+                    # v = fy * y_d + cy
 
-                # Convert back to pixel coordinates
-                # u = fx * x_d + s * y_d + cx
-                # u = fx * x_d + cx
-                # v = fy * y_d + cy
+                    u = ((x_d + 1.0) / 2.0) * item.width
+                    v = ((y_d + 1.0) / 2.0) * item.height
 
-                u = ((x_d + 1.0) / 2.0) * item.width
-                v = ((y_d + 1.0) / 2.0) * item.height
+                    annotation_pixels.append([u, v])
 
-                annotation_pixels.append([u, v])
+                annotation_pixels = np.array(annotation_pixels)
 
-            annotation_pixels = np.array(annotation_pixels)
+            # MVP OPENCV
+            else:
+                mv = view_matrix @ model_matrix  # Model View matrix
+                K = projection_matrix[:3, :3]  # Projection matrix
 
-            # OPENCV projection
+                # Option 1 - Apply MV on points manually
+                # points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+                # points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
+                # points_3d = points_4d[:, :3]  # (N, 3)
+                # object_points = points_3d.reshape(-1, 3)  # (N, 3)
+                # rvec = np.zeros((3, 1), dtype=np.float64)
+                # tvec = np.zeros((3, 1), dtype=np.float64)
 
-            # mv = view_matrix @ model_matrix  # Model View matrix
-            # p = projection_matrix[:3, :3]  # Projection matrix
-            # points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-            # projected_points = (mv @ points_homogeneous.T).T  # (N, 4)
-            # projected_points = projected_points[:, :3]  # (N, 3)
-            #
-            # rvec = np.zeros((3, 1), dtype=np.float64)
-            # tvec = np.zeros((3, 1), dtype=np.float64)
-            # dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-            #
-            # # append zeros dim to 3rd coordinate # (N, 2) -> (N, 3)
-            # points_2d, _ = cv2.projectPoints(projected_points, rvec, tvec, p, dist_coeffs)
-            # points_2d = points_2d.reshape(-1, 2)  # (N, 2)
+                # Option 2 - Apply MV on points using OpenCV
+                points_3d = points
+                object_points = points_3d.reshape(1, -1, 3)
+                rvec, _ = cv2.Rodrigues(mv[:3, :3])  # Convert rotation matrix to rotation vector
+                tvec = mv[:3, 3]  # Translation vector
 
+                # 2D camera #
+                # D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                # points_2d, _ = cv2.projectPoints(object_points, rvec, tvec, K, D)
+                # annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+
+                # Fisheye camera #
+                D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                points_2d, _ = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+                annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
             if project_remotely:
                 if apply_annotation_distortion:
