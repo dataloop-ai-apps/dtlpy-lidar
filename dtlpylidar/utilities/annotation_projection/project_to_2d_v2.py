@@ -291,16 +291,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta16 = theta14 * theta2  # if k8 != 0.0 else 0
 
                             if support_external_parameters:
-                                r2 = r * r
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
-                                x_r = (radial / r) * x
-                                y_r = (radial / r) * y
-                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
                             else:
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
-                                x_d = (radial / r) * x
-                                y_d = (radial / r) * y
+                            x_d = (radial / r) * x
+                            y_d = (radial / r) * y
 
                         elif camera_mode == "MEI":
                             xi = camera_distortion.get('xi', 1.0)
@@ -334,18 +329,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta16 = theta14 * theta2
 
                             if support_external_parameters:
-                                radial = theta + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16
-                                # radial = theta * (
-                                #         1.0
-                                #         + k1 * theta2
-                                #         + k2 * theta4
-                                #         + k3 * theta6
-                                #         + k4 * theta8
-                                #         + k5 * theta10
-                                #         + k6 * theta12
-                                #         + k7 * theta14
-                                #         + k8 * theta16
-                                # )
+                                radial = theta * (
+                                        1.0
+                                        + k1 * theta2
+                                        + k2 * theta4
+                                        + k3 * theta6
+                                        + k4 * theta8
+                                        + k5 * theta10
+                                        + k6 * theta12
+                                        + k7 * theta14
+                                        + k8 * theta16
+                                )
                             else:
                                 radial = theta + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8
 
