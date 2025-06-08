@@ -276,7 +276,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         # Fisheye camera #
                         elif camera_mode == "Fisheye":
                             if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) / r0
+                                r = math.sqrt(x * x + y * y) # / r0
                             else:
                                 r = math.sqrt(x * x + y * y)
                             theta = math.atan(r)
@@ -301,17 +301,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                         elif camera_mode == "MEI":
                             xi = camera_distortion.get('xi', 1.0)
-                            d1 = x ** 2 + y ** 2 + 1
+                            d1 = (x ** 2 + y ** 2) + 1
                             d2 = xi * math.sqrt(d1) + 1
-                            x_d = x / d2
-                            y_d = y / d2
+                            x_r = x / d2
+                            y_r = y / d2
 
                             if support_external_parameters:
-                                r2 = (x_d ** 2 + y_d ** 2) / (r0 ** 2)
+                                r2 = (x_r ** 2 + y_r ** 2) # / (r0 ** 2)
                             else:
-                                r2 = x_d ** 2 + y_d ** 2
-                            x_d += (2 * p1 * x_d * y_d + p2 * (r2 + 2 * x_d ** 2))
-                            y_d += (p1 * (r2 + 2 * y_d ** 2) + 2 * p2 * x_d * y_d)
+                                r2 = x_r ** 2 + y_r ** 2
+                            x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
+                            y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
 
                         elif camera_mode == "Kannala":
                             if support_external_parameters:
@@ -341,8 +341,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                             if support_external_parameters:
                                 r2 = x_r ** 2 + y_r ** 2
-                                x_d = x_r + 2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2)
-                                y_d = y_r + p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r
+                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
+                                y_d = y_r + (p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r)
                             else:
                                 x_d = x_r
                                 y_d = y_r
