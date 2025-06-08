@@ -141,7 +141,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
     def calculate_frame_annotations(self, annotation_data,
                                     frame_images, images_map, cameras_map,
                                     factor_m, # TODO: Remove later
-                                    full_annotations_only, apply_annotation_distortion, project_remotely):
+                                    full_annotations_only, apply_annotation_distortion,
+                                    project_remotely, support_external_parameters):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
@@ -152,6 +153,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param full_annotations_only: if True, only full annotations will be projected to 2D
         :param apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
         :param project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
+        :param support_external_parameters: if True, support external parameters for the projection (k4, k5, k6, k7, k8)
         :return: None
         """
         projection_mode = "Manual" # "Manual" or "OpenCV"
@@ -245,11 +247,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 for point_2d in points_2d:
                     (x, y) = point_2d
                     if apply_annotation_distortion:
-                        camera_mode = "Fisheye" # "2D" or "Fisheye"
+                        # TODO: find a flag to support switch
+                        camera_mode = "2D" # "2D" or "Fisheye"
 
                         # 2D
                         if camera_mode == "2D":
-                            r = math.sqrt(x * x + y * y) # / r0
+                            if support_external_parameters:
+                                r = math.sqrt(x * x + y * y) / r0
+                            else:
+                                r = math.sqrt(x * x + y * y)
 
                             r2 = r * r # if k1 != 0.0 else 0
                             r4 = r2 * r2 # if k2 != 0.0 else 0
@@ -260,14 +266,19 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             r14 = r12 * r2 # if k7 != 0.0 else 0
                             r16 = r14 * r2 # if k8 != 0.0 else 0
 
-                            # radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
-                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
+                            if support_external_parameters:
+                                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                            else:
+                                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
                             x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
                             y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
 
                         # Fisheye camera #
                         else:
-                            r = math.sqrt(x * x + y * y)  # / r0
+                            if support_external_parameters:
+                                r = math.sqrt(x * x + y * y) / r0
+                            else:
+                                r = math.sqrt(x * x + y * y)
                             theta = math.atan(r)
 
                             theta2 = theta * theta  # if k1 != 0.0 else 0
@@ -279,10 +290,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta14 = theta12 * theta2  # if k7 != 0.0 else 0
                             theta16 = theta14 * theta2  # if k8 != 0.0 else 0
 
-                            # radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
-                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
-                            x_d = (radial / r) * x
-                            y_d = (radial / r) * y
+                            if support_external_parameters:
+                                r = math.sqrt(x * x + y * y)
+                                r2 = r * r
+                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
+                                x_r = (radial / r) * x
+                                y_r = (radial / r) * y
+                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+                            else:
+                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
+                                x_d = (radial / r) * x
+                                y_d = (radial / r) * y
                     else:
                         # If no distortion, just use the projected pixel directly
                         x_d = x
@@ -297,6 +316,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # MVP OPENCV
             else:
+                if support_external_parameters:
+                    raise ValueError("OpenCV projection mode does not support external parameters.")
+
                 mv = view_matrix @ model_matrix  # Model View matrix
                 K = projection_matrix[:3, :3]  # Projection matrix
 
@@ -450,7 +472,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
     def project_annotations_to_2d(self, item: dl.Item,
                                   full_annotations_only: bool = False,
-                                  project_remotely: bool = True):
+                                  project_remotely: bool = True,
+                                  support_external_parameters: bool = False):
         """
         Function that projects annotations to 2D from the original lidar scene annotations.
         :param item: DL lidar scene item
@@ -582,7 +605,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     factor_m=factor_m,  # TODO: Remove later
                     full_annotations_only=full_annotations_only,
                     apply_annotation_distortion=apply_annotation_distortion,
-                    project_remotely=project_remotely
+                    project_remotely=project_remotely,
+                    support_external_parameters=support_external_parameters
                 )
 
 
@@ -593,10 +617,12 @@ if __name__ == "__main__":
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
     project_remotely = False
+    support_external_parameters = False
 
     runner = AnnotationProjection(dataset=frames_item.dataset)
     runner.project_annotations_to_2d(
         item=frames_item,
         full_annotations_only=full_annotations_only,
-        project_remotely=project_remotely
+        project_remotely=project_remotely,
+        support_external_parameters=support_external_parameters
     )
