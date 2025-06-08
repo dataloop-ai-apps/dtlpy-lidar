@@ -294,8 +294,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
                             else:
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
-                            x_d = (radial / r) * x
-                            y_d = (radial / r) * y
+
+                            scale = radial / r if r > 1e-8 else 1.0
+                            x_d = scale * x
+                            y_d = scale * y
 
                         elif camera_mode == "MEI":
                             xi = camera_distortion.get('xi', 1.0)
@@ -329,17 +331,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta16 = theta14 * theta2
 
                             if support_external_parameters:
-                                radial = theta * (
-                                        1.0
-                                        + k1 * theta2
-                                        + k2 * theta4
-                                        + k3 * theta6
-                                        + k4 * theta8
-                                        + k5 * theta10
-                                        + k6 * theta12
-                                        + k7 * theta14
-                                        + k8 * theta16
-                                )
+                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
                             else:
                                 radial = theta + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8
 
