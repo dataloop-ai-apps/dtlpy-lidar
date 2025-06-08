@@ -154,7 +154,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
         :return: None
         """
-        projection_mode = "OpenCV" # "Manual" or "OpenCV"
+        projection_mode = "Manual" # "Manual" or "OpenCV"
 
         # Cube annotation data geo
         annotation_translation = annotation_data["geo"][0]
@@ -242,27 +242,53 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     x_px, y_px = point_2d
 
                     # Normalize to camera coordinates
-                    # x = (x_px - cx) / fx
-                    # y = (y_px - cy) / fy
+                    x = (x_px - cx) / fx
+                    y = (y_px - cy) / fy
 
-                    x = (x_px / item.width) * 2.0 - 1.0
-                    y = (y_px / item.height) * 2.0 - 1.0
+                    # x = (x_px / item.width) * 2.0 - 1.0
+                    # y = (y_px / item.height) * 2.0 - 1.0
+
+                    # x = x_px
+                    # y = y_px
 
                     if apply_annotation_distortion:
-                        r = math.sqrt(x * x + y * y) / r0
-                        r2 = r * r # if k1 != 0.0 else 0
-                        r4 = r2 * r2 # if k2 != 0.0 else 0
-                        r6 = r4 * r2 # if k3 != 0.0 else 0
-                        r8 = r6 * r2 # if k4 != 0.0 else 0
-                        r10 = r8 * r2 # if k5 != 0.0 else 0
-                        r12 = r10 * r2 # if k6 != 0.0 else 0
-                        r14 = r12 * r2 # if k7 != 0.0 else 0
-                        r16 = r14 * r2 # if k8 != 0.0 else 0
+                        camera_mode = "2D" # "2D" or "Fisheye"
 
-                        radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                        # 2D
+                        if camera_mode == "2D":
+                            r = math.sqrt(x * x + y * y) # / r0
 
-                        x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                        y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+                            r2 = r * r # if k1 != 0.0 else 0
+                            r4 = r2 * r2 # if k2 != 0.0 else 0
+                            r6 = r4 * r2 # if k3 != 0.0 else 0
+                            r8 = r6 * r2 # if k4 != 0.0 else 0
+                            r10 = r8 * r2 # if k5 != 0.0 else 0
+                            r12 = r10 * r2 # if k6 != 0.0 else 0
+                            r14 = r12 * r2 # if k7 != 0.0 else 0
+                            r16 = r14 * r2 # if k8 != 0.0 else 0
+
+                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                            x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
+                            y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+
+                        # Fisheye camera #
+                        else:
+                            r = math.sqrt(x * x + y * y)  # / r0
+                            theta = math.atan(r)
+
+                            theta2 = theta * theta  # if k1 != 0.0 else 0
+                            theta4 = theta2 * theta2  # if k2 != 0.0 else 0
+                            theta6 = theta4 * theta2  # if k3 != 0.0 else 0
+                            theta8 = theta6 * theta2  # if k4 != 0.0 else 0
+                            theta10 = theta8 * theta2  # if k5 != 0.0 else 0
+                            theta12 = theta10 * theta2  # if k6 != 0.0 else 0
+                            theta14 = theta12 * theta2  # if k7 != 0.0 else 0
+                            theta16 = theta14 * theta2  # if k8 != 0.0 else 0
+
+                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
+                            # radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
+                            x_d = (radial / r) * x
+                            y_d = (radial / r) * y
 
                         x_d = np.clip(x_d, -1.0, 1.0)
                         y_d = np.clip(y_d, -1.0, 1.0)
@@ -272,12 +298,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         y_d = y
 
                     # Convert back to pixel coordinates
-                    # u = fx * x_d + s * y_d + cx
+                    u = fx * x_d + skew * y_d + cx
                     # u = fx * x_d + cx
-                    # v = fy * y_d + cy
+                    v = fy * y_d + cy
 
-                    u = ((x_d + 1.0) / 2.0) * item.width
-                    v = ((y_d + 1.0) / 2.0) * item.height
+                    # u = ((x_d + 1.0) / 2.0) * item.width
+                    # v = ((y_d + 1.0) / 2.0) * item.height
 
                     annotation_pixels.append([u, v])
 
@@ -299,16 +325,22 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 # Option 2 - Apply MV on points using OpenCV
                 points_3d = points
                 object_points = points_3d.reshape(1, -1, 3)
-                rvec, _ = cv2.Rodrigues(mv[:3, :3])  # Convert rotation matrix to rotation vector
+                rvec, _ = cv2.Rodrigues(mv[:3, :3])  # Rotation vector
                 tvec = mv[:3, 3]  # Translation vector
 
                 # 2D camera #
-                # D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                # if apply_annotation_distortion:
+                #     D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                # else:
+                #     D = np.zeros((5,), dtype=np.float64)
                 # points_2d, _ = cv2.projectPoints(object_points, rvec, tvec, K, D)
                 # annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
                 # Fisheye camera #
-                D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                if apply_annotation_distortion:
+                    D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                else:
+                    D = np.zeros((4,), dtype=np.float64)
                 points_2d, _ = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
                 annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
@@ -355,7 +387,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 anno_points_2d = []
                 for annotation in annotations:
                     anno_points_2d.append(annotation.geo)
-                image_path = images_map.get(item_id, dict()).get("path")
+                image_path = images_map.get(item_id, dict()).get("output_path")
                 image = cv2.imread(image_path)
 
                 edges = [
@@ -437,8 +469,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # TODO: Debug
         apply_image_undistortion = False
         apply_annotation_distortion = True
-        factor_m = -150.0
-        # factor_m = 1
+        # factor_m = -150.0
+        factor_m = 1
 
         # Download lidar scene video's json
         items_path = os.path.join(os.getcwd(), item.id)
@@ -533,9 +565,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             # Save or display
                             cv2.imwrite(image_path, undistorted)
 
+                    # Overwrite annotated image
+                    image_path = str(os.path.join(frames_item.id, item.filename[1:]))
+                    image = cv2.imread(image_path)
+                    img_name, img_ext = os.path.splitext(image_path)
+                    output_image_path = f"{img_name}_annotated{img_ext}"
+                    cv2.imwrite(output_image_path, image)
+
                     images_map[item_id] = {
                         "item": item,
                         "path": image_path,
+                        "output_path": output_image_path
                     }
                 else:
                     raise ValueError("project_remotely must be either True or False.")
