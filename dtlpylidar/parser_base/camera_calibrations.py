@@ -38,7 +38,7 @@ class Intrinsic:
 
 class Distortion:
     def __init__(self, k1=0.0, k2=0.0, k3=0.0, k4=0.0, k5=0.0, k6=0.0, k7=0.0, k8=0.0,
-                 p1=0.0, p2=0.0,
+                 p1=0.0, p2=0.0, xi=0.0,
                  r0=1.0, m=1.0):
         """
         Distortion matrix parameters:
@@ -57,6 +57,7 @@ class Distortion:
         self.k8 = k8
         self.p1 = p1
         self.p2 = p2
+        self.xi = xi
         self.r0 = r0
         self.m = m
 
@@ -80,7 +81,7 @@ class Distortion:
         distortion_json['p1'] = self.p1
         distortion_json['p2'] = self.p2
         # Extended scale parameters
-        extended_scale_keys = ['r0', 'm']
+        extended_scale_keys = ['xi', 'r0', 'm']
         for key in extended_scale_keys:
             if getattr(self, key, 1.0) != 1.0:
                 distortion_json[key] = getattr(self, key)

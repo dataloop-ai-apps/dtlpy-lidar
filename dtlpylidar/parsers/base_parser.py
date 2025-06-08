@@ -138,6 +138,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
                     k8=image_details.get("distortion", dict()).get("k8", 0),
                     p1=image_details.get("distortion", dict()).get("p1", 0),
                     p2=image_details.get("distortion", dict()).get("p2", 0),
+                    xi=image_details.get("distortion", dict()).get("xi", 0),
                     r0=image_details.get("distortion", dict()).get("r0", 1),
                     m=image_details.get("distortion", dict()).get("m", 1)
                 )
