@@ -307,9 +307,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             y_r = y / d2
 
                             if support_external_parameters:
-                                r2 = (x_r ** 2 + y_r ** 2) # / (r0 ** 2)
+                                r2 = (x_r * x_r + y_r * y_r) # / (r0 ** 2)
                             else:
-                                r2 = x_r ** 2 + y_r ** 2
+                                r2 = x_r * x_r + y_r * y_r
                             x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
                             y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
 
@@ -340,7 +340,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             y_r = scale * y
 
                             if support_external_parameters:
-                                r2 = x_r ** 2 + y_r ** 2
+                                r2 = x_r * x_r + y_r * y_r
                                 x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
                                 y_d = y_r + (p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r)
                             else:
