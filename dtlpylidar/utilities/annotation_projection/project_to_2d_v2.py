@@ -336,13 +336,16 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 radial = theta + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8
 
                             scale = radial / r if r > 1e-8 else 1.0
-                            x_d = scale * x
-                            y_d = scale * y
+                            x_r = scale * x
+                            y_r = scale * y
 
                             if support_external_parameters:
-                                r2 = x_d ** 2 + y_d ** 2
-                                x_d += 2.0 * p1 * x_d * y_d + p2 * (r2 + 2.0 * x_d ** 2)
-                                y_d += p1 * (r2 + 2.0 * y_d ** 2) + 2.0 * p2 * x_d * y_d
+                                r2 = x_r ** 2 + y_r ** 2
+                                x_d = 2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2)
+                                y_d = p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r
+                            else:
+                                x_d = x_r
+                                y_d = y_r
 
                         else:
                             raise ValueError(
