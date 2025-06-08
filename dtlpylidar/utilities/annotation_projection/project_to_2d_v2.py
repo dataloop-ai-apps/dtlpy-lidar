@@ -328,21 +328,26 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 rvec, _ = cv2.Rodrigues(mv[:3, :3])  # Rotation vector
                 tvec = mv[:3, 3]  # Translation vector
 
+                # Sanity condition for OpenCV projection #
+                points_cam = (rvec.squeeze() @ points_3d.T + tvec.reshape(-1, 1)).T  # shape (N, 3)
+                if not np.all(points_cam[:, 2] > 0):
+                    continue # Skip if any point is behind the camera
+
                 # 2D camera #
-                # if apply_annotation_distortion:
-                #     D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-                # else:
-                #     D = np.zeros((5,), dtype=np.float64)
-                # points_2d, _ = cv2.projectPoints(object_points, rvec, tvec, K, D)
-                # annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+                if apply_annotation_distortion:
+                    D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                else:
+                    D = np.zeros((5,), dtype=np.float64)
+                points_2d, _ = cv2.projectPoints(object_points, rvec, tvec, K, D)
+                annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
                 # Fisheye camera #
-                if apply_annotation_distortion:
-                    D = np.array([k1, k2, k3, k4], dtype=np.float64)
-                else:
-                    D = np.zeros((4,), dtype=np.float64)
-                points_2d, _ = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
-                annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+                # if apply_annotation_distortion:
+                #     D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                # else:
+                #     D = np.zeros((4,), dtype=np.float64)
+                # points_2d, _ = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+                # annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
             if project_remotely:
                 if apply_annotation_distortion:
