@@ -248,7 +248,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     (x, y) = point_2d
                     if apply_annotation_distortion:
                         # TODO: find a flag to support switch
-                        camera_mode = "2D" # "2D" or "Fisheye"
+                        camera_mode = "Kannala" # "2D" or "Fisheye" or "MEI" or "Kannala"
 
                         # 2D
                         if camera_mode == "2D":
@@ -274,7 +274,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
 
                         # Fisheye camera #
-                        else:
+                        elif camera_mode == "Fisheye":
                             if support_external_parameters:
                                 r = math.sqrt(x * x + y * y) / r0
                             else:
@@ -291,7 +291,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta16 = theta14 * theta2  # if k8 != 0.0 else 0
 
                             if support_external_parameters:
-                                r = math.sqrt(x * x + y * y)
                                 r2 = r * r
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
                                 x_r = (radial / r) * x
@@ -302,6 +301,68 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
                                 x_d = (radial / r) * x
                                 y_d = (radial / r) * y
+
+                        elif camera_mode == "MEI":
+                            xi = camera_distortion.get('xi', 1.0)
+                            d1 = x ** 2 + y ** 2 + 1
+                            d2 = xi * math.sqrt(d1) + 1
+                            x_d = x / d2
+                            y_d = y / d2
+
+                            if support_external_parameters:
+                                r2 = (x_d ** 2 + y_d ** 2) / (r0 ** 2)
+                            else:
+                                r2 = x_d ** 2 + y_d ** 2
+                            x_d += (2 * p1 * x_d * y_d + p2 * (r2 + 2 * x_d ** 2))
+                            y_d += (p1 * (r2 + 2 * y_d ** 2) + 2 * p2 * x_d * y_d)
+
+                        elif camera_mode == "Kannala":
+                            if support_external_parameters:
+                                r = math.sqrt(x * x + y * y) # / r0
+                            else:
+                                r = math.sqrt(x * x + y * y)
+                            theta = math.atan(r)
+
+                            # Compute distortion terms using theta powers
+                            theta2 = theta * theta
+                            theta4 = theta2 * theta2
+                            theta6 = theta4 * theta2
+                            theta8 = theta6 * theta2
+                            theta10 = theta8 * theta2
+                            theta12 = theta10 * theta2
+                            theta14 = theta12 * theta2
+                            theta16 = theta14 * theta2
+
+                            if support_external_parameters:
+                                radial = theta + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16
+                                # radial = theta * (
+                                #         1.0
+                                #         + k1 * theta2
+                                #         + k2 * theta4
+                                #         + k3 * theta6
+                                #         + k4 * theta8
+                                #         + k5 * theta10
+                                #         + k6 * theta12
+                                #         + k7 * theta14
+                                #         + k8 * theta16
+                                # )
+                            else:
+                                radial = theta + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8
+
+                            scale = radial / r if r > 1e-8 else 1.0
+                            x_d = scale * x
+                            y_d = scale * y
+
+                            if support_external_parameters:
+                                r2 = x_d ** 2 + y_d ** 2
+                                x_d += 2.0 * p1 * x_d * y_d + p2 * (r2 + 2.0 * x_d ** 2)
+                                y_d += p1 * (r2 + 2.0 * y_d ** 2) + 2.0 * p2 * x_d * y_d
+
+                        else:
+                            raise ValueError(
+                                f"Unsupported camera mode: {camera_mode}. "
+                                f"Supported modes are '2D', 'Fisheye', 'MEI', and 'Kannala'."
+                            )
                     else:
                         # If no distortion, just use the projected pixel directly
                         x_d = x
@@ -617,7 +678,7 @@ if __name__ == "__main__":
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
     project_remotely = False
-    support_external_parameters = False
+    support_external_parameters = True
 
     runner = AnnotationProjection(dataset=frames_item.dataset)
     runner.project_annotations_to_2d(
