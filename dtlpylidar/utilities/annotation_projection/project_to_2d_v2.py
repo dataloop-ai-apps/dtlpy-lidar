@@ -229,11 +229,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # Manual MVP
             if projection_mode == "Manual":
-                mvp = projection_matrix @ view_matrix @ model_matrix
+                mv = view_matrix @ model_matrix
                 points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-                points_4d = (mvp @ points_homogeneous.T).T  # (N, 4)
+                points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
                 points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
                 points_2d = points_3d[:, :2] / np.abs(points_3d[:, 2:3])  # (N, 2)
+
+                # Check if the point is behind the camera
+                # points_cam = view_matrix @ model_matrix @ projection_matrix @ points_4d.T
+                # points_cam = points_cam.T  # shape (N, 4)
+                # if not np.all(points_cam[:, 2] > 0):
+                #     continue  # Skip if any point is behind the camera
 
                 # Distortion
 
@@ -242,17 +248,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     x_px, y_px = point_2d
 
                     # Normalize to camera coordinates
-                    x = (x_px - cx) / fx
-                    y = (y_px - cy) / fy
-
-                    # x = (x_px / item.width) * 2.0 - 1.0
-                    # y = (y_px / item.height) * 2.0 - 1.0
-
-                    # x = x_px
-                    # y = y_px
+                    x = x_px
+                    y = y_px
 
                     if apply_annotation_distortion:
-                        camera_mode = "2D" # "2D" or "Fisheye"
+                        camera_mode = "Fisheye" # "2D" or "Fisheye"
 
                         # 2D
                         if camera_mode == "2D":
@@ -285,22 +285,24 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta14 = theta12 * theta2  # if k7 != 0.0 else 0
                             theta16 = theta14 * theta2  # if k8 != 0.0 else 0
 
-                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
-                            # radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
+                            # radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
+                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
                             x_d = (radial / r) * x
                             y_d = (radial / r) * y
 
-                        x_d = np.clip(x_d, -1.0, 1.0)
-                        y_d = np.clip(y_d, -1.0, 1.0)
+                        # x_d = np.clip(x_d, -1.0, 1.0)
+                        # y_d = np.clip(y_d, -1.0, 1.0)
                     else:
                         # If no distortion, just use the projected pixel directly
                         x_d = x
                         y_d = y
 
                     # Convert back to pixel coordinates
-                    u = fx * x_d + skew * y_d + cx
-                    # u = fx * x_d + cx
-                    v = fy * y_d + cy
+                    mv_points = np.array([x_d, y_d, 1, 1])  # (2,)
+                    mvp_points = projection_matrix @ mv_points  # (4,)
+
+                    u = mvp_points[0] / mvp_points[3]  # (u, v, 1)
+                    v = mvp_points[1] / mvp_points[3]  # (u, v, 1)
 
                     # u = ((x_d + 1.0) / 2.0) * item.width
                     # v = ((y_d + 1.0) / 2.0) * item.height
@@ -325,29 +327,29 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 # Option 2 - Apply MV on points using OpenCV
                 points_3d = points
                 object_points = points_3d.reshape(1, -1, 3)
-                rvec, _ = cv2.Rodrigues(mv[:3, :3])  # Rotation vector
-                tvec = mv[:3, 3]  # Translation vector
+                rvec = cv2.Rodrigues(mv[:3, :3])[0].astype(np.float64)  # Rotation vector
+                tvec = mv[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
 
                 # Sanity condition for OpenCV projection #
-                points_cam = (rvec.squeeze() @ points_3d.T + tvec.reshape(-1, 1)).T  # shape (N, 3)
+                points_cam = (mv[:3, :3] @ points_3d.T + tvec).T  # shape (N, 3)
                 if not np.all(points_cam[:, 2] > 0):
                     continue # Skip if any point is behind the camera
 
                 # 2D camera #
-                if apply_annotation_distortion:
-                    D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-                else:
-                    D = np.zeros((5,), dtype=np.float64)
-                points_2d, _ = cv2.projectPoints(object_points, rvec, tvec, K, D)
-                annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+                # if apply_annotation_distortion:
+                #     D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                # else:
+                #     D = np.zeros((5,), dtype=np.float64)
+                # points_2d, _ = cv2.projectPoints(object_points, rvec, tvec, K, D)
+                # annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
                 # Fisheye camera #
-                # if apply_annotation_distortion:
-                #     D = np.array([k1, k2, k3, k4], dtype=np.float64)
-                # else:
-                #     D = np.zeros((4,), dtype=np.float64)
-                # points_2d, _ = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
-                # annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+                if apply_annotation_distortion:
+                    D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                else:
+                    D = np.zeros((4,), dtype=np.float64)
+                points_2d, _ = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+                annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
             if project_remotely:
                 if apply_annotation_distortion:
