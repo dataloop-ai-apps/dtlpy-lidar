@@ -137,6 +137,30 @@ class AnnotationProjection(dl.BaseServiceRunner):
             "bl": tuple(bl)
         }
 
+    # TODO: Support MEI:
+    @staticmethod
+    def mei_project_point(P_cam, xi, k1, k2, p1, p2, gamma1, gamma2, u0, v0):
+        # Normalize direction
+        norm = np.linalg.norm(P_cam)
+        Xn, Yn, Zn = P_cam / norm
+
+        # Unified MEI projection
+        d = np.sqrt(Xn ** 2 + Yn ** 2 + Zn ** 2)
+        denom = Zn + xi * d
+        x = Xn / denom
+        y = Yn / denom
+
+        # Distortion
+        r2 = x ** 2 + y ** 2
+        x_d = x * (1 + k1 * r2 + k2 * r2 ** 2) + 2 * p1 * x * y + p2 * (r2 + 2 * x ** 2)
+        y_d = y * (1 + k1 * r2 + k2 * r2 ** 2) + p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y
+
+        # Projection
+        u = gamma1 * x_d + u0
+        v = gamma2 * y_d + v0
+
+        return np.array([u, v])
+
     # TODO: remove factor_m at the end
     def calculate_frame_annotations(self, annotation_data,
                                     frame_images, images_map, cameras_map,
@@ -663,7 +687,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '68415b9d1bd0d57f611190a1'
+    item_id = '684605d0a4feb733933b28f1'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
     project_remotely = False
