@@ -233,13 +233,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
                 points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
                 points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
-                points_2d = points_3d[:, :2] / np.abs(points_3d[:, 2:3])  # (N, 2)
 
-                # Check if the point is behind the camera
-                # points_cam = view_matrix @ model_matrix @ projection_matrix @ points_4d.T
-                # points_cam = points_cam.T  # shape (N, 4)
-                # if not np.all(points_cam[:, 2] > 0):
-                #     continue  # Skip if any point is behind the camera
+                # Check if the points are behind the camera
+                if not np.all(points_3d[:, 2] > 0):
+                    continue  # Skip if any point is behind the camera
+
+                points_2d = points_3d[:, :2] / points_3d[:, 2:3]  # (N, 2)
 
                 # Distortion
 
@@ -267,7 +266,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             r14 = r12 * r2 # if k7 != 0.0 else 0
                             r16 = r14 * r2 # if k8 != 0.0 else 0
 
-                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                            # radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
                             x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
                             y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
 
@@ -289,23 +289,20 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
                             x_d = (radial / r) * x
                             y_d = (radial / r) * y
-
-                        # x_d = np.clip(x_d, -1.0, 1.0)
-                        # y_d = np.clip(y_d, -1.0, 1.0)
                     else:
                         # If no distortion, just use the projected pixel directly
                         x_d = x
                         y_d = y
 
                     # Convert back to pixel coordinates
-                    mv_points = np.array([x_d, y_d, 1, 1])  # (2,)
-                    mvp_points = projection_matrix @ mv_points  # (4,)
+                    # mv_points = np.array([x_d, y_d, 1, 1])  # (2,)
+                    # mvp_points = projection_matrix @ mv_points  # (4,)
+                    #
+                    # u = mvp_points[0] / mvp_points[3]  # (u, v, 1)
+                    # v = mvp_points[1] / mvp_points[3]  # (u, v, 1)
 
-                    u = mvp_points[0] / mvp_points[3]  # (u, v, 1)
-                    v = mvp_points[1] / mvp_points[3]  # (u, v, 1)
-
-                    # u = ((x_d + 1.0) / 2.0) * item.width
-                    # v = ((y_d + 1.0) / 2.0) * item.height
+                    u = fx * x_d + skew * y_d + cx
+                    v = fy * y_d + cy
 
                     annotation_pixels.append([u, v])
 
@@ -331,8 +328,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 tvec = mv[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
 
                 # Sanity condition for OpenCV projection #
-                points_cam = (mv[:3, :3] @ points_3d.T + tvec).T  # shape (N, 3)
-                if not np.all(points_cam[:, 2] > 0):
+                points_homogeneous = np.hstack([points_3d, np.ones((points_3d.shape[0], 1))])  # (N, 4)
+                points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
+                if not np.all(points_4d[:, 2] > 0):
                     continue # Skip if any point is behind the camera
 
                 # 2D camera #
