@@ -238,18 +238,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 if not np.all(points_3d[:, 2] > 0):
                     continue  # Skip if any point is behind the camera
 
-                points_2d = points_3d[:, :2] / points_3d[:, 2:3]  # (N, 2)
-
                 # Distortion
 
+                points_2d = points_3d[:, :2] / points_3d[:, 2:3]  # (N, 2)
                 annotation_pixels = []
                 for point_2d in points_2d:
-                    x_px, y_px = point_2d
-
-                    # Normalize to camera coordinates
-                    x = x_px
-                    y = y_px
-
+                    (x, y) = point_2d
                     if apply_annotation_distortion:
                         camera_mode = "Fisheye" # "2D" or "Fisheye"
 
@@ -295,16 +289,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         y_d = y
 
                     # Convert back to pixel coordinates
-                    # mv_points = np.array([x_d, y_d, 1, 1])  # (2,)
-                    # mvp_points = projection_matrix @ mv_points  # (4,)
-                    #
-                    # u = mvp_points[0] / mvp_points[3]  # (u, v, 1)
-                    # v = mvp_points[1] / mvp_points[3]  # (u, v, 1)
-
-                    u = fx * x_d + skew * y_d + cx
-                    v = fy * y_d + cy
-
-                    annotation_pixels.append([u, v])
+                    mv_points = np.array([x_d, y_d, 1, 1])
+                    mvp_points = projection_matrix @ mv_points
+                    annotation_pixels.append(mvp_points[:2])
 
                 annotation_pixels = np.array(annotation_pixels)
 
@@ -312,6 +299,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
             else:
                 mv = view_matrix @ model_matrix  # Model View matrix
                 K = projection_matrix[:3, :3]  # Projection matrix
+
+                # Check if the points are behind the camera
+                points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+                points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
+                points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+                if not np.all(points_3d[:, 2] > 0):
+                    continue  # Skip if any point is behind the camera
 
                 # Option 1 - Apply MV on points manually
                 # points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
@@ -322,16 +316,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 # tvec = np.zeros((3, 1), dtype=np.float64)
 
                 # Option 2 - Apply MV on points using OpenCV
-                points_3d = points
-                object_points = points_3d.reshape(1, -1, 3)
+                object_points = points.reshape(1, -1, 3)
                 rvec = cv2.Rodrigues(mv[:3, :3])[0].astype(np.float64)  # Rotation vector
                 tvec = mv[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
-
-                # Sanity condition for OpenCV projection #
-                points_homogeneous = np.hstack([points_3d, np.ones((points_3d.shape[0], 1))])  # (N, 4)
-                points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
-                if not np.all(points_4d[:, 2] > 0):
-                    continue # Skip if any point is behind the camera
 
                 # 2D camera #
                 # if apply_annotation_distortion:
