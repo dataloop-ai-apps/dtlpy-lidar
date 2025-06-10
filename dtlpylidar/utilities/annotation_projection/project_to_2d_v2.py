@@ -164,7 +164,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
     # TODO: remove factor_m at the end
     def calculate_frame_annotations(self, annotation_data,
                                     frame_images, images_map, cameras_map,
-                                    factor_m, # TODO: Remove later
                                     full_annotations_only, apply_annotation_distortion,
                                     project_remotely, support_external_parameters):
         """
@@ -180,6 +179,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param support_external_parameters: if True, support external parameters for the projection (k4, k5, k6, k7, k8)
         :return: None
         """
+        factor_m = -150.0
+        # factor_m = 1
+
         # "Manual" or "OpenCV"
         projection_mode = "Manual"
 
@@ -199,9 +201,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         # iterate over images that correspond with frame
         for idx, image_calibrations in enumerate(frame_images):
-            # get image and camera calibrations
             item_id = image_calibrations.get('image_id')
             item = images_map[item_id]["item"]
+
+            # Set builder
+            images_map[item_id]["builder"] = item.annotations.builder()
+
+            # Get image and camera calibrations
             camera_id = image_calibrations.get('camera_id')
             camera_calibrations = cameras_map.get(camera_id)
             sensors_data = camera_calibrations.get('sensorsData')
@@ -258,7 +264,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
             # camera_model = camera_distortion.get('model', 'Regular')
-            camera_model = "Kannala"
+            camera_model = "MEI"
 
             # Manual MVP
             if projection_mode == "Manual":
@@ -491,19 +497,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 continue
 
             if project_remotely is True:
-                # TODO: TBD - aggregated same image annotations and upload in one go
-
-                # create annotation builder
-                builder = item.annotations.builder()
-                # add annotation to the item
+                # Add annotation to the item builder
                 for annotation in annotations:
-                    builder.add(
+                    images_map[item_id]["builder"].add(
                         annotation_definition=annotation,
                         object_id=annotation_data["object_id"],
                         object_visible=annotation_data["object_visible"]
                     )
-                # upload annotation to the item
-                item.annotations.upload(builder)
             else:
                 anno_points_2d = []
                 for annotation in annotations:
@@ -524,6 +524,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     cv2.line(image, pt1, pt2, color=color, thickness=2)
                 cv2.imwrite(image_path, image)
 
+        # Upload annotation to the item
+        if project_remotely is True:
+            for item_id in images_map.keys():
+                images_map[item_id]["builder"].upload()
 
     @staticmethod
     def build_frame_annotations_per_frame_mapping(lidar_video_content, annotations):
@@ -591,8 +595,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # TODO: Debug
         apply_image_undistortion = False
         apply_annotation_distortion = True
-        # factor_m = -150.0
-        factor_m = 1
 
         # Download lidar scene video's json
         items_path = os.path.join(os.getcwd(), item.id)
@@ -669,11 +671,16 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             k1 = camera_distortion["k1"]
                             k2 = camera_distortion["k2"]
                             k3 = camera_distortion["k3"]
+                            # k4 = camera_distortion["k4"]
+                            # k5 = camera_distortion["k5"]
+                            # k6 = camera_distortion["k6"]
+                            # k7 = camera_distortion["k7"]
+                            # k8 = camera_distortion["k8"]
                             p1 = camera_distortion["p1"]
                             p2 = camera_distortion["p2"]
                             # factor_m = camera_distortion.get('m', 1.0)
-                            D = factor_m * np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
-
+                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
+                            # D = np.array([k1, k2, p1, p2, k3, k4, k5, k6, k7, k8], dtype=np.float64)  # Distortion coefficients
                             # Original distorted image
                             image = cv2.imread(image_path)
                             h, w = image.shape[:2]
@@ -709,7 +716,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     frame_images=frame_images,
                     images_map=images_map,
                     cameras_map=cameras_map,
-                    factor_m=factor_m,  # TODO: Remove later
                     full_annotations_only=full_annotations_only,
                     apply_annotation_distortion=apply_annotation_distortion,
                     project_remotely=project_remotely,
@@ -720,7 +726,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '68415b9d1bd0d57f611190a1'
+    item_id = '68480f2acba940b0c2b0ad4a'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
     project_remotely = False
