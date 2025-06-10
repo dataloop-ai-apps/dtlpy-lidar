@@ -11,6 +11,7 @@ from scipy.ndimage import map_coordinates
 
 
 class AnnotationProjection(dl.BaseServiceRunner):
+    # TODO: Remove from init later
     def __init__(self, dataset: dl.Dataset = None):
         def hex_to_bgr(hex_color: str):
             hex_color = hex_color.lstrip('#')
@@ -23,6 +24,26 @@ class AnnotationProjection(dl.BaseServiceRunner):
         if dataset is not None:
             for label_name, label_data in dataset.labels_flat_dict.items():
                 self.labels_colors[label_name] = hex_to_bgr(label_data.color)
+
+    @staticmethod
+    def sort_face(points_4):
+        # points_4: (4, 2) array
+        points_4 = np.array(points_4)
+        sorted_by_y = points_4[np.argsort(points_4[:, 1])]  # sort top to bottom
+
+        top_two = sorted_by_y[:2]
+        bottom_two = sorted_by_y[2:]
+
+        # now sort left/right within top and bottom
+        tl, tr = top_two[np.argsort(top_two[:, 0])]
+        bl, br = bottom_two[np.argsort(bottom_two[:, 0])]
+
+        return {
+            "tl": tuple(tl),
+            "tr": tuple(tr),
+            "br": tuple(br),
+            "bl": tuple(bl)
+        }
 
     def create_annotation(self, option, label, annotation_pixels, depths, width, height, full_annotations_only):
         """
@@ -117,50 +138,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
             return points
         else:
             raise ValueError(f"Unsupported option: {option}. Supported options are 'Cube', 'Polygons', and 'Points'.")
-
-    @staticmethod
-    def sort_face(points_4):
-        # points_4: (4, 2) array
-        points_4 = np.array(points_4)
-        sorted_by_y = points_4[np.argsort(points_4[:, 1])]  # sort top to bottom
-
-        top_two = sorted_by_y[:2]
-        bottom_two = sorted_by_y[2:]
-
-        # now sort left/right within top and bottom
-        tl, tr = top_two[np.argsort(top_two[:, 0])]
-        bl, br = bottom_two[np.argsort(bottom_two[:, 0])]
-
-        return {
-            "tl": tuple(tl),
-            "tr": tuple(tr),
-            "br": tuple(br),
-            "bl": tuple(bl)
-        }
-
-    # TODO: Support MEI:
-    @staticmethod
-    def mei_project_point(P_cam, xi, k1, k2, p1, p2, gamma1, gamma2, u0, v0):
-        # Normalize direction
-        norm = np.linalg.norm(P_cam)
-        Xn, Yn, Zn = P_cam / norm
-
-        # Unified MEI projection
-        d = np.sqrt(Xn ** 2 + Yn ** 2 + Zn ** 2)
-        denom = Zn + xi * d
-        x = Xn / denom
-        y = Yn / denom
-
-        # Distortion
-        r2 = x ** 2 + y ** 2
-        x_d = x * (1 + k1 * r2 + k2 * r2 ** 2) + 2 * p1 * x * y + p2 * (r2 + 2 * x ** 2)
-        y_d = y * (1 + k1 * r2 + k2 * r2 ** 2) + p1 * (r2 + 2 * y ** 2) + 2 * p2 * x * y
-
-        # Projection
-        u = gamma1 * x_d + u0
-        v = gamma2 * y_d + v0
-
-        return np.array([u, v])
 
     # TODO: remove factor_m at the end
     def handle_frame(self, cameras_map, frame_images, frame_annotations, flags):
