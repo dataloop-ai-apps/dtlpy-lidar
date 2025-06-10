@@ -659,10 +659,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_d = y_r
 
                             elif camera_model == "MEI":
-                                # x_n = x / math.sqrt(x * x + y * y + z * z)
-                                # y_n = y / math.sqrt(x * x + y * y + z * z)
-                                # z_n = z / math.sqrt(x * x + y * y + z * z)
-
                                 # Radial distortion coefficients
                                 d1 = math.sqrt(x * x + y * y + z * z)
                                 d2 = z + xi * d1
