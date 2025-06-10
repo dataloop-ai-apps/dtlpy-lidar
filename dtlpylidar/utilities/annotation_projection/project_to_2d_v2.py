@@ -265,19 +265,20 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     continue  # Skip if any point is behind the camera
 
                 # Distortion
-
-                points_2d = points_3d[:, :2] / points_3d[:, 2:3]  # (N, 2)
                 annotation_pixels = []
-                for point_2d in points_2d:
-                    (x, y) = point_2d
+                for point_3d in points_3d:
+                    (x, y, z) = point_3d
                     if apply_annotation_distortion:
                         # TODO: find a flag to support switch
                         camera_mode = "Kannala" # "2D" or "Fisheye" or "MEI" or "Kannala"
 
                         # 2D
                         if camera_mode == "2D":
+                            x = x / z
+                            y = y / z
+
                             if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) / r0
+                                r = math.sqrt(x * x + y * y) # / r0
                             else:
                                 r = math.sqrt(x * x + y * y)
 
@@ -303,7 +304,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 r = math.sqrt(x * x + y * y) # / r0
                             else:
                                 r = math.sqrt(x * x + y * y)
-                            theta = math.atan(r)
+                            theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                             theta2 = theta * theta  # if k1 != 0.0 else 0
                             theta4 = theta2 * theta2  # if k2 != 0.0 else 0
@@ -324,9 +325,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             y_d = scale * y
 
                         elif camera_mode == "MEI":
+                            x = x / math.sqrt(x * x + y * y + z * z)
+                            y = y / math.sqrt(x * x + y * y + z * z)
+                            z = z / math.sqrt(x * x + y * y + z * z)
+
                             xi = camera_distortion.get('xi', 1.0)
-                            d1 = (x ** 2 + y ** 2) + 1
-                            d2 = xi * math.sqrt(d1) + 1
+                            d1 = (x * x + y * y + z * z)
+                            d2 = z + xi * math.sqrt(d1)
                             x_r = x / d2
                             y_r = y / d2
 
@@ -342,7 +347,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 r = math.sqrt(x * x + y * y) # / r0
                             else:
                                 r = math.sqrt(x * x + y * y)
-                            theta = math.atan(r)
+                            theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                             # Compute distortion terms using theta powers
                             theta2 = theta * theta
@@ -687,7 +692,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '684605d0a4feb733933b28f1'
+    item_id = '68415b9d1bd0d57f611190a1'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
     project_remotely = False
