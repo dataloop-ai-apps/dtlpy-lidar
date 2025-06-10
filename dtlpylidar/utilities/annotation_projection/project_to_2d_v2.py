@@ -446,7 +446,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y = (j - cy) / fy
                                     r2 = x * x + y * y
 
-                                    # Back-project to unit sphere (MEI model)
                                     norm = np.sqrt(r2 + 1)
                                     x_s = x / norm
                                     y_s = y / norm
@@ -660,15 +659,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_d = y_r
 
                             elif camera_model == "MEI":
-                                x_n = x / math.sqrt(x * x + y * y + z * z)
-                                y_n = y / math.sqrt(x * x + y * y + z * z)
-                                z_n = z / math.sqrt(x * x + y * y + z * z)
+                                # x_n = x / math.sqrt(x * x + y * y + z * z)
+                                # y_n = y / math.sqrt(x * x + y * y + z * z)
+                                # z_n = z / math.sqrt(x * x + y * y + z * z)
 
                                 # Radial distortion coefficients
-                                d1 = (x_n * x_n + y_n * y_n + z_n * z_n)
-                                d2 = z_n + xi * math.sqrt(d1)
-                                x_r = x_n / d2
-                                y_r = y_n / d2
+                                d1 = math.sqrt(x * x + y * y + z * z)
+                                d2 = z + xi * d1
+                                x_r = x / d2
+                                y_r = y / d2
 
                                 # Tangent distortion coefficients
                                 if support_external_parameters:
