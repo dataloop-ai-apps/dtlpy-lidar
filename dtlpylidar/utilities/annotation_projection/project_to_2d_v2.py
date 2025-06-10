@@ -7,6 +7,7 @@ import dtlpylidar.utilities.transformations as transformations
 from tqdm import tqdm
 import cv2
 import math
+from scipy.ndimage import map_coordinates
 
 
 class AnnotationProjection(dl.BaseServiceRunner):
@@ -593,8 +594,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :return: None
         """
         # TODO: Debug
-        apply_image_undistortion = False
-        apply_annotation_distortion = True
+        undistort_mode = "Manual"
+        apply_image_undistortion = True
+        apply_annotation_distortion = False
 
         # Download lidar scene video's json
         items_path = os.path.join(os.getcwd(), item.id)
@@ -671,31 +673,79 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             k1 = camera_distortion["k1"]
                             k2 = camera_distortion["k2"]
                             k3 = camera_distortion["k3"]
-                            # k4 = camera_distortion["k4"]
-                            # k5 = camera_distortion["k5"]
-                            # k6 = camera_distortion["k6"]
-                            # k7 = camera_distortion["k7"]
-                            # k8 = camera_distortion["k8"]
-                            p1 = camera_distortion["p1"]
-                            p2 = camera_distortion["p2"]
+                            k4 = camera_distortion.get("k4", 0.0)  # Optional, if not present, set to 0
+                            k5 = camera_distortion.get("k5", 0.0)  # Optional, if not present, set to 0
+                            k6 = camera_distortion.get("k6", 0.0)  # Optional, if not present, set to 0
+                            k7 = camera_distortion.get("k7", 0.0)  # Optional, if not present, set to 0
+                            k8 = camera_distortion.get("k8", 0.0)  # Optional, if not present, set to 0
+                            p1 = camera_distortion.get("p1", 0.0)
+                            p2 = camera_distortion.get("p2", 0.0)
+                            xi = camera_distortion.get('xi', 1.0)
                             # factor_m = camera_distortion.get('m', 1.0)
 
-                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
-                            # D = np.array([k1, k2, p1, p2, k3, k4, k5, k6, k7, k8], dtype=np.float64)  # Distortion coefficients
-                            # Original distorted image
-                            image = cv2.imread(image_path)
-                            h, w = image.shape[:2]
+                            # OpenCV distortion coefficients
+                            if undistort_mode == "Manuel":
+                                h, w = item.height, item.width
+                                k = [k1, k2, k3, k4, k5, k6, k7, k8]  # Only first three coefficients are used
+                                map_x = np.zeros((h, w), dtype=np.float32)
+                                map_y = np.zeros((h, w), dtype=np.float32)
+                                for y in range(h):
+                                    for x in range(w):
+                                        # Normalized coordinates
+                                        x_n = (x - cx) / fx
+                                        y_n = (y - cy) / fy
+                                        r_u = np.sqrt(x_n ** 2 + y_n ** 2)
+                                        theta = np.arctan(r_u) if r_u != 0 else 0
 
-                            # Compute optimal rectified camera matrix (keeps FOV)
-                            new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w,h))
+                                        # Distorted radius via 8-coeff model
+                                        theta_powers = [theta ** (2 * i + 1) for i in range(8)]
+                                        r_d = theta + sum(k[i] * theta_powers[i] for i in range(8))
 
-                            # Undistort
-                            undistorted = cv2.undistort(image, K, D, None, new_K)
+                                        scale = r_d / r_u if r_u != 0 else 1
+                                        x_d = x_n * scale
+                                        y_d = y_n * scale
 
-                            # Save or display
-                            x, y, w, h = roi
-                            undistorted = undistorted[y:y + h, x:x + w]
-                            cv2.imwrite(image_path, undistorted)
+                                        map_x[y, x] = fx * x_d + cx
+                                        map_y[y, x] = fy * y_d + cy
+
+                                image = cv2.imread(image_path)
+                                coords = [map_y.ravel(), map_x.ravel()]
+                                undistorted_r = map_coordinates(image[:, :, 0], coords, order=1, mode='reflect').reshape(
+                                    (h, w))
+                                undistorted_g = map_coordinates(image[:, :, 1], coords, order=1, mode='reflect').reshape(
+                                    (h, w))
+                                undistorted_b = map_coordinates(image[:, :, 2], coords, order=1, mode='reflect').reshape(
+                                    (h, w))
+                                undistorted = np.stack([undistorted_r, undistorted_g, undistorted_b], axis=2).astype(
+                                    np.uint8)
+
+                                cv2.imwrite(image_path, undistorted)
+
+                            elif undistort_mode == "OpenCV":
+                                # Distortion coefficients
+                                D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+
+                                # Original distorted image
+                                image = cv2.imread(image_path)
+                                h, w = image.shape[:2]
+
+                                # Compute optimal rectified camera matrix (keeps FOV)
+                                new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w,h))
+
+                                # Undistort
+                                undistorted = cv2.undistort(image, K, D, None, new_K)
+
+                                # Save or display
+                                x, y, w, h = roi
+                                undistorted = undistorted[y:y + h, x:x + w]
+                                cv2.imwrite(image_path, undistorted)
+
+                            else:
+                                raise ValueError(
+                                    f"Unsupported undistort mode: {undistort_mode}. "
+                                    f"Supported modes are 'Manual' and 'OpenCV'."
+                                )
+
 
                     # Overwrite annotated image
                     image_path = str(os.path.join(frames_item.id, item.filename[1:]))
