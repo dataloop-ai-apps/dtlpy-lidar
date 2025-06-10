@@ -679,6 +679,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             p1 = camera_distortion["p1"]
                             p2 = camera_distortion["p2"]
                             # factor_m = camera_distortion.get('m', 1.0)
+
                             D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)  # Distortion coefficients
                             # D = np.array([k1, k2, p1, p2, k3, k4, k5, k6, k7, k8], dtype=np.float64)  # Distortion coefficients
                             # Original distorted image
@@ -686,12 +687,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             h, w = image.shape[:2]
 
                             # Compute optimal rectified camera matrix (keeps FOV)
-                            new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), alpha=0)
+                            new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w,h))
 
                             # Undistort
                             undistorted = cv2.undistort(image, K, D, None, new_K)
 
                             # Save or display
+                            x, y, w, h = roi
+                            undistorted = undistorted[y:y + h, x:x + w]
                             cv2.imwrite(image_path, undistorted)
 
                     # Overwrite annotated image
@@ -726,7 +729,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '68480f2acba940b0c2b0ad4a'
+    item_id = '68415b9d1bd0d57f611190a1'
     frames_item = dl.items.get(item_id=item_id)
     full_annotations_only = False
     project_remotely = False
