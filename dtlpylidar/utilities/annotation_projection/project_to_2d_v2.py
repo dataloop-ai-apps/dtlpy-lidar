@@ -159,8 +159,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
         full_annotations_only = flags.get("full_annotations_only", False)
         project_remotely = flags.get("project_remotely", False)
         support_external_parameters = flags.get("support_external_parameters", True)
-        apply_image_undistortion = flags.get("apply_image_undistortion", True)
-        apply_annotation_distortion = flags.get("apply_annotation_distortion", False)
+        apply_image_undistortion = flags.get("apply_image_undistortion", False)
+        apply_annotation_distortion = flags.get("apply_annotation_distortion", True)
 
         # Debug flags: "Manual" or "OpenCV"
         undistort_mode = "Manual"
@@ -660,15 +660,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_d = y_r
 
                             elif camera_model == "MEI":
-                                x = x / math.sqrt(x * x + y * y + z * z)
-                                y = y / math.sqrt(x * x + y * y + z * z)
-                                z = z / math.sqrt(x * x + y * y + z * z)
+                                x_n = x / math.sqrt(x * x + y * y + z * z)
+                                y_n = y / math.sqrt(x * x + y * y + z * z)
+                                z_n = z / math.sqrt(x * x + y * y + z * z)
 
                                 # Radial distortion coefficients
-                                d1 = (x * x + y * y + z * z)
-                                d2 = z + xi * math.sqrt(d1)
-                                x_r = x / d2
-                                y_r = y / d2
+                                d1 = (x_n * x_n + y_n * y_n + z_n * z_n)
+                                d2 = z_n + xi * math.sqrt(d1)
+                                x_r = x_n / d2
+                                y_r = y_n / d2
 
                                 # Tangent distortion coefficients
                                 if support_external_parameters:
