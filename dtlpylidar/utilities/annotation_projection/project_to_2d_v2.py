@@ -180,7 +180,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param support_external_parameters: if True, support external parameters for the projection (k4, k5, k6, k7, k8)
         :return: None
         """
-        projection_mode = "Manual" # "Manual" or "OpenCV"
+        # "Manual" or "OpenCV"
+        projection_mode = "Manual"
 
         # Cube annotation data geo
         annotation_translation = annotation_data["geo"][0]
@@ -400,7 +401,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                         else:
                             raise ValueError(
-                                f"Unsupported camera model: {camera_model}. "
+                                f"Unsupported camera model: {camera_model}.\n"
                                 f"Supported models are 'Regular', 'Brown', 'Fisheye', 'Kannala', 'MEI'."
                             )
                     else:
