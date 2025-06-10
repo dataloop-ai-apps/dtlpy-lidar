@@ -249,9 +249,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
             k6 = camera_distortion.get("k6", 0.0) * factor_m  # Optional, if not present, set to 0
             k7 = camera_distortion.get("k7", 0.0) * factor_m  # Optional, if not present, set to 0
             k8 = camera_distortion.get("k8", 0.0) * factor_m  # Optional, if not present, set to 0
-            p1 = camera_distortion["p1"] * factor_m
-            p2 = camera_distortion["p2"] * factor_m
-            r0 = camera_distortion.get('r0', 1.0)
+            p1 = camera_distortion.get("p1", 0.0) * factor_m
+            p2 = camera_distortion.get("p2", 0.0) * factor_m
+            xi = camera_distortion.get('xi', 1.0)
+            # r0 = camera_distortion.get('r0', 1.0)
+            r0 = 1.0
+
+            # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
+            # camera_model = camera_distortion.get('model', 'Regular')
+            camera_model = "Kannala"
 
             # Manual MVP
             if projection_mode == "Manual":
@@ -269,39 +275,64 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 for point_3d in points_3d:
                     (x, y, z) = point_3d
                     if apply_annotation_distortion:
-                        # TODO: find a flag to support switch
-                        camera_mode = "Kannala" # "2D" or "Fisheye" or "MEI" or "Kannala"
-
-                        # 2D
-                        if camera_mode == "2D":
+                        # Regular (OpenCV Regular camera) #
+                        if camera_model == "Regular":
+                            z = z if z != 0 else 1e-8  # Avoid division by zero
                             x = x / z
                             y = y / z
 
+                            # Radial distortion coefficients
                             if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) # / r0
+                                r = math.sqrt(x * x + y * y) / r0
                             else:
                                 r = math.sqrt(x * x + y * y)
 
                             r2 = r * r # if k1 != 0.0 else 0
                             r4 = r2 * r2 # if k2 != 0.0 else 0
                             r6 = r4 * r2 # if k3 != 0.0 else 0
-                            r8 = r6 * r2 # if k4 != 0.0 else 0
-                            r10 = r8 * r2 # if k5 != 0.0 else 0
-                            r12 = r10 * r2 # if k6 != 0.0 else 0
-                            r14 = r12 * r2 # if k7 != 0.0 else 0
-                            r16 = r14 * r2 # if k8 != 0.0 else 0
 
+                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
+                            x_r = x * radial
+                            y_r = y * radial
+
+                            # Tangent distortion coefficients
+                            x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
+                            y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+
+                        # Brown–Conrady #
+                        elif camera_model == "Brown":
+                            z = z if z != 0 else 1e-8  # Avoid division by zero
+                            x = x / z
+                            y = y / z
+
+                            # Radial distortion coefficients
                             if support_external_parameters:
-                                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                                r = math.sqrt(x * x + y * y) / r0
                             else:
-                                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
-                            x_d = x * radial + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                            y_d = y * radial + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+                                r = math.sqrt(x * x + y * y)
 
-                        # Fisheye camera #
-                        elif camera_mode == "Fisheye":
+                            r2 = r * r  # if k1 != 0.0 else 0
+                            r4 = r2 * r2  # if k2 != 0.0 else 0
+                            r6 = r4 * r2  # if k3 != 0.0 else 0
+                            r8 = r6 * r2  # if k4 != 0.0 else 0
+                            r10 = r8 * r2  # if k5 != 0.0 else 0
+                            r12 = r10 * r2  # if k6 != 0.0 else 0
+                            r14 = r12 * r2  # if k7 != 0.0 else 0
+                            r16 = r14 * r2  # if k8 != 0.0 else 0
+
+                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                            x_r = x * radial
+                            y_r = y * radial
+
+                            # Tangent distortion coefficients
+                            x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
+                            y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+
+                        # Fisheye (OpenCV Fisheye camera) #
+                        elif camera_model == "Fisheye":
+                            # Radial distortion coefficients
                             if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) # / r0
+                                r = math.sqrt(x * x + y * y) / r0
                             else:
                                 r = math.sqrt(x * x + y * y)
                             theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
@@ -310,46 +341,20 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta4 = theta2 * theta2  # if k2 != 0.0 else 0
                             theta6 = theta4 * theta2  # if k3 != 0.0 else 0
                             theta8 = theta6 * theta2  # if k4 != 0.0 else 0
-                            theta10 = theta8 * theta2  # if k5 != 0.0 else 0
-                            theta12 = theta10 * theta2  # if k6 != 0.0 else 0
-                            theta14 = theta12 * theta2  # if k7 != 0.0 else 0
-                            theta16 = theta14 * theta2  # if k8 != 0.0 else 0
 
-                            if support_external_parameters:
-                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
-                            else:
-                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
-
+                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
                             scale = radial / r if r > 1e-8 else 1.0
                             x_d = scale * x
                             y_d = scale * y
 
-                        elif camera_mode == "MEI":
-                            x = x / math.sqrt(x * x + y * y + z * z)
-                            y = y / math.sqrt(x * x + y * y + z * z)
-                            z = z / math.sqrt(x * x + y * y + z * z)
-
-                            xi = camera_distortion.get('xi', 1.0)
-                            d1 = (x * x + y * y + z * z)
-                            d2 = z + xi * math.sqrt(d1)
-                            x_r = x / d2
-                            y_r = y / d2
-
+                        elif camera_model == "Kannala":
+                            # Radial distortion coefficients
                             if support_external_parameters:
-                                r2 = (x_r * x_r + y_r * y_r) # / (r0 ** 2)
-                            else:
-                                r2 = x_r * x_r + y_r * y_r
-                            x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
-                            y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
-
-                        elif camera_mode == "Kannala":
-                            if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) # / r0
+                                r = math.sqrt(x * x + y * y) / r0
                             else:
                                 r = math.sqrt(x * x + y * y)
                             theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
-                            # Compute distortion terms using theta powers
                             theta2 = theta * theta
                             theta4 = theta2 * theta2
                             theta6 = theta4 * theta2
@@ -359,15 +364,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             theta14 = theta12 * theta2
                             theta16 = theta14 * theta2
 
-                            if support_external_parameters:
-                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
-                            else:
-                                radial = theta + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8
-
+                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
                             scale = radial / r if r > 1e-8 else 1.0
                             x_r = scale * x
                             y_r = scale * y
 
+                            # Tangent distortion coefficients
                             if support_external_parameters:
                                 r2 = x_r * x_r + y_r * y_r
                                 x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
@@ -376,10 +378,30 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 x_d = x_r
                                 y_d = y_r
 
+                        elif camera_model == "MEI":
+                            x = x / math.sqrt(x * x + y * y + z * z)
+                            y = y / math.sqrt(x * x + y * y + z * z)
+                            z = z / math.sqrt(x * x + y * y + z * z)
+
+                            # Radial distortion coefficients
+                            d1 = (x * x + y * y + z * z)
+                            d2 = z + xi * math.sqrt(d1)
+                            x_r = x / d2
+                            y_r = y / d2
+
+                            # Tangent distortion coefficients
+                            if support_external_parameters:
+                                r = math.sqrt(x_r * x_r + y_r * y_r) / r0
+                            else:
+                                r = math.sqrt(x_r * x_r + y_r * y_r)
+                            r2 = r * r
+                            x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
+                            y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
+
                         else:
                             raise ValueError(
-                                f"Unsupported camera mode: {camera_mode}. "
-                                f"Supported modes are '2D', 'Fisheye', 'MEI', and 'Kannala'."
+                                f"Unsupported camera model: {camera_model}. "
+                                f"Supported models are 'Regular', 'Brown', 'Fisheye', 'Kannala', 'MEI'."
                             )
                     else:
                         # If no distortion, just use the projected pixel directly
@@ -393,7 +415,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                 annotation_pixels = np.array(annotation_pixels)
 
-            # MVP OPENCV
+            # OpenCV MVP
             else:
                 if support_external_parameters:
                     raise ValueError("OpenCV projection mode does not support external parameters.")
@@ -421,22 +443,27 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 rvec = cv2.Rodrigues(mv[:3, :3])[0].astype(np.float64)  # Rotation vector
                 tvec = mv[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
 
-                # 2D camera #
-                # if apply_annotation_distortion:
-                #     D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-                # else:
-                #     D = np.zeros((5,), dtype=np.float64)
-                # points_2d, _ = cv2.projectPoints(object_points, rvec, tvec, K, D)
-                # annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
-
-                # Fisheye camera #
                 if apply_annotation_distortion:
-                    D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                    # 2D camera #
+                    if camera_model == "Regular":
+                        D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                        (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
+                    elif camera_model == "Fisheye":
+                        D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                        (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+                    else:
+                        raise ValueError(
+                            f"Unsupported camera model: {camera_model}.\n"
+                            f"Supported models are 'Regular' and 'Fisheye'."
+                        )
                 else:
-                    D = np.zeros((4,), dtype=np.float64)
-                points_2d, _ = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+                    D = np.zeros((5,), dtype=np.float64)
+                    (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
+
+                # points_2d: (N, 1, 2) - OpenCV format
                 annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
+            # Select annotation option based on the projection mode
             if project_remotely:
                 if apply_annotation_distortion:
                     option = "Polygons"
