@@ -163,47 +163,49 @@ class AnnotationProjection(dl.BaseServiceRunner):
         return np.array([u, v])
 
     # TODO: remove factor_m at the end
-    def calculate_frame_annotations(self, annotation_data,
-                                    frame_images, images_map, cameras_map,
-                                    full_annotations_only, apply_annotation_distortion,
-                                    project_remotely, support_external_parameters):
+    def handle_frame(self, cameras_map, frame_images, frame_annotations, flags):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
-        :param annotation_data: annotation data from frame_annotations_per_frame
-        :param frame_images: images that correspond with the current frame number
-        :param images_map: map of image IDs to image paths
         :param cameras_map: map of camera IDs to camera calibrations
-        :param full_annotations_only: if True, only full annotations will be projected to 2D
-        :param apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
-        :param project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
-        :param support_external_parameters: if True, support external parameters for the projection (k4, k5, k6, k7, k8)
+        :param frame_images: images that correspond with the current frame number
+        :param frame_annotations: annotations that correspond with the current frame number
+        :param flags: flags for the projection
+        - apply_image_undistortion: if True, apply image undistortion to the images before projection
+        - apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
+        - full_annotations_only: if True, only full annotations will be projected to 2D
+        - project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
+        - support_external_parameters: if True, support external parameters for the projection (k4, k5, k6, k7, k8)
         :return: None
         """
-        factor_m = -150.0
-        # factor_m = 1
+        # Parse flags
+        full_annotations_only = flags.get("full_annotations_only", False)
+        project_remotely = flags.get("project_remotely", False)
+        support_external_parameters = flags.get("support_external_parameters", True)
+        apply_image_undistortion = flags.get("apply_image_undistortion", False)
+        apply_annotation_distortion = flags.get("apply_annotation_distortion", True)
 
-        # "Manual" or "OpenCV"
+        # Debug flags: "Manual" or "OpenCV"
+        undistort_mode = "Manual"
         projection_mode = "Manual"
 
-        # Cube annotation data geo
-        annotation_translation = annotation_data["geo"][0]
-        annotation_scale = annotation_data["geo"][1]
-        annotation_rotation = annotation_data["geo"][2]
-
-        # calculate 3D cube points from annotation (PCD normalized)
-        points = transformations.calc_cuboid_corners(
-            dimensions=annotation_scale
-        )
-        model_matrix = transformations.calc_transform_matrix(
-            rotation=annotation_rotation,
-            position=annotation_translation
-        )
+        # factor_m = -150.0
+        factor_m = 1
 
         # iterate over images that correspond with frame
+        images_map = {}
         for idx, image_calibrations in enumerate(frame_images):
+            print("Processing image {}/{}...".format(idx + 1, len(frame_images)))
+
+            ###############
+            # Extract MVP #
+            ###############
+
             item_id = image_calibrations.get('image_id')
-            item = images_map[item_id]["item"]
+            item = dl.items.get(item_id=item_id)
+            images_map[item_id] = {
+                "item": item
+            }
 
             # Set builder
             images_map[item_id]["builder"] = item.annotations.builder()
@@ -265,265 +267,411 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
             # camera_model = camera_distortion.get('model', 'Regular')
-            camera_model = "MEI"
+            camera_model = "Kannala"
 
-            # Manual MVP
-            if projection_mode == "Manual":
-                mv = view_matrix @ model_matrix
-                points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-                points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
-                points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+            ################
+            # Undistortion #
+            ################
 
-                # Check if the points are behind the camera
-                if not np.all(points_3d[:, 2] > 0):
-                    continue  # Skip if any point is behind the camera
+            if project_remotely is True:
+                images_map[item_id]["path"] = None
+            elif project_remotely is False:
+                # Set image paths
+                image_path = str(os.path.join(frames_item.id, item.filename[1:]))
+                img_name, img_ext = os.path.splitext(image_path)
+                output_image_path = f"{img_name}_annotated{img_ext}"
+                images_map[item_id]["path"] = image_path
+                images_map[item_id]["output_path"] = output_image_path
 
-                # Distortion
-                annotation_pixels = []
-                for point_3d in points_3d:
-                    (x, y, z) = point_3d
+                if not os.path.exists(image_path):
+                    download_image_path = os.path.dirname(image_path)
+                    item.download(local_path=download_image_path)
+
+                # Remove distortion from image
+                if apply_image_undistortion:
+                    camera_id = image_calibrations.get('camera_id')
+                    camera_calibrations = cameras_map.get(camera_id)
+                    sensors_data = camera_calibrations.get('sensorsData')
+
+                    # calculate projection matrix (Default values: Orthographic projection)
+                    intrinsic_data = sensors_data.get('intrinsicData', dict())
+                    fx = intrinsic_data.get('fx', 1.0)
+                    fy = intrinsic_data.get('fy', 1.0)
+                    s = intrinsic_data.get('skew', 0.0)
+                    cx = intrinsic_data.get('cx', 0.0)
+                    cy = intrinsic_data.get('cy', 0.0)
+                    K = np.array([
+                        [fx, s, cx],
+                        [0, fy, cy],
+                        [0, 0, 1]
+                    ])
+
+                    camera_distortion = intrinsic_data.get('distortion', dict())
+                    k1 = camera_distortion["k1"]
+                    k2 = camera_distortion["k2"]
+                    k3 = camera_distortion["k3"]
+                    k4 = camera_distortion.get("k4", 0.0)  # Optional, if not present, set to 0
+                    k5 = camera_distortion.get("k5", 0.0)  # Optional, if not present, set to 0
+                    k6 = camera_distortion.get("k6", 0.0)  # Optional, if not present, set to 0
+                    k7 = camera_distortion.get("k7", 0.0)  # Optional, if not present, set to 0
+                    k8 = camera_distortion.get("k8", 0.0)  # Optional, if not present, set to 0
+                    p1 = camera_distortion.get("p1", 0.0)
+                    p2 = camera_distortion.get("p2", 0.0)
+                    xi = camera_distortion.get('xi', 1.0)
+                    # factor_m = camera_distortion.get('m', 1.0)
+
+                    # OpenCV distortion coefficients
+                    if undistort_mode == "Manual":
+                        h, w = item.height, item.width
+                        k = [k1, k2, k3, k4, k5, k6, k7, k8]  # Only first three coefficients are used
+                        map_x = np.zeros((h, w), dtype=np.float32)
+                        map_y = np.zeros((h, w), dtype=np.float32)
+                        for y in range(h):
+                            for x in range(w):
+                                # Normalized coordinates
+                                x_n = (x - cx) / fx
+                                y_n = (y - cy) / fy
+                                r_u = np.sqrt(x_n ** 2 + y_n ** 2)
+                                theta = np.arctan(r_u) if r_u != 0 else 0
+
+                                # Distorted radius via 8-coeff model
+                                theta_powers = [theta ** (2 * i + 1) for i in range(8)]
+                                r_d = theta + sum(k[i] * theta_powers[i] for i in range(8))
+
+                                scale = r_d / r_u if r_u != 0 else 1
+                                x_d = x_n * scale
+                                y_d = y_n * scale
+
+                                map_x[y, x] = fx * x_d + cx
+                                map_y[y, x] = fy * y_d + cy
+
+                        image = cv2.imread(image_path)
+                        coords = [map_y.ravel(), map_x.ravel()]
+                        undistorted_r = map_coordinates(
+                            image[:, :, 0], coords, order=1, mode='reflect').reshape((h, w))
+                        undistorted_g = map_coordinates(
+                            image[:, :, 1], coords, order=1, mode='reflect').reshape((h, w))
+                        undistorted_b = map_coordinates(
+                            image[:, :, 2], coords, order=1, mode='reflect').reshape((h, w))
+                        undistorted = np.stack(
+                            [undistorted_r, undistorted_g, undistorted_b], axis=2).astype(np.uint8)
+                        cv2.imwrite(output_image_path, undistorted)
+
+                    elif undistort_mode == "OpenCV":
+                        # Distortion coefficients
+                        D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+
+                        # Original distorted image
+                        image = cv2.imread(image_path)
+                        h, w = image.shape[:2]
+
+                        # Compute optimal rectified camera matrix (keeps FOV)
+                        new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w, h))
+
+                        # Undistort
+                        undistorted = cv2.undistort(image, K, D, None, new_K)
+
+                        # Save or display
+                        x, y, w, h = roi
+                        undistorted = undistorted[y:y + h, x:x + w]
+                        cv2.imwrite(output_image_path, undistorted)
+
+                    else:
+                        raise ValueError(
+                            f"Unsupported undistort mode: {undistort_mode}. "
+                            f"Supported modes are 'Manual' and 'OpenCV'."
+                        )
+                else:
+                    # Overwrite annotated image
+                    image = cv2.imread(image_path)
+                    cv2.imwrite(output_image_path, image)
+
+                images_map[item_id] = {
+                    "item": item,
+                    "path": image_path,
+                    "output_path": output_image_path
+                }
+            else:
+                raise ValueError("project_remotely must be either True or False.")
+
+            ##########################
+            # Apply MVP + Distortion #
+            ##########################
+
+            for annotation_data in tqdm(frame_annotations):
+                # Cube annotation data geo
+                annotation_translation = annotation_data["geo"][0]
+                annotation_scale = annotation_data["geo"][1]
+                annotation_rotation = annotation_data["geo"][2]
+
+                # calculate 3D cube points from annotation (PCD normalized)
+                points = transformations.calc_cuboid_corners(
+                    dimensions=annotation_scale
+                )
+                model_matrix = transformations.calc_transform_matrix(
+                    rotation=annotation_rotation,
+                    position=annotation_translation
+                )
+
+                # Manual MVP
+                if projection_mode == "Manual":
+                    mv = view_matrix @ model_matrix
+                    points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+                    points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
+                    points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+
+                    # Check if the points are behind the camera
+                    if not np.all(points_3d[:, 2] > 0):
+                        continue  # Skip if any point is behind the camera
+
+                    # Distortion
+                    annotation_pixels = []
+                    for point_3d in points_3d:
+                        (x, y, z) = point_3d
+                        if apply_annotation_distortion:
+                            # Regular (OpenCV Regular camera) #
+                            if camera_model == "Regular":
+                                z = z if z != 0 else 1e-8  # Avoid division by zero
+                                x = x / z
+                                y = y / z
+
+                                # Radial distortion coefficients
+                                if support_external_parameters:
+                                    r = math.sqrt(x * x + y * y) / r0
+                                else:
+                                    r = math.sqrt(x * x + y * y)
+
+                                r2 = r * r # if k1 != 0.0 else 0
+                                r4 = r2 * r2 # if k2 != 0.0 else 0
+                                r6 = r4 * r2 # if k3 != 0.0 else 0
+
+                                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
+                                x_r = x * radial
+                                y_r = y * radial
+
+                                # Tangent distortion coefficients
+                                x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
+                                y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+
+                            # Brown–Conrady #
+                            elif camera_model == "Brown":
+                                z = z if z != 0 else 1e-8  # Avoid division by zero
+                                x = x / z
+                                y = y / z
+
+                                # Radial distortion coefficients
+                                if support_external_parameters:
+                                    r = math.sqrt(x * x + y * y) / r0
+                                else:
+                                    r = math.sqrt(x * x + y * y)
+
+                                r2 = r * r  # if k1 != 0.0 else 0
+                                r4 = r2 * r2  # if k2 != 0.0 else 0
+                                r6 = r4 * r2  # if k3 != 0.0 else 0
+                                r8 = r6 * r2  # if k4 != 0.0 else 0
+                                r10 = r8 * r2  # if k5 != 0.0 else 0
+                                r12 = r10 * r2  # if k6 != 0.0 else 0
+                                r14 = r12 * r2  # if k7 != 0.0 else 0
+                                r16 = r14 * r2  # if k8 != 0.0 else 0
+
+                                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+                                x_r = x * radial
+                                y_r = y * radial
+
+                                # Tangent distortion coefficients
+                                x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
+                                y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+
+                            # Fisheye (OpenCV Fisheye camera) #
+                            elif camera_model == "Fisheye":
+                                # Radial distortion coefficients
+                                if support_external_parameters:
+                                    r = math.sqrt(x * x + y * y) / r0
+                                else:
+                                    r = math.sqrt(x * x + y * y)
+                                theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
+
+                                theta2 = theta * theta  # if k1 != 0.0 else 0
+                                theta4 = theta2 * theta2  # if k2 != 0.0 else 0
+                                theta6 = theta4 * theta2  # if k3 != 0.0 else 0
+                                theta8 = theta6 * theta2  # if k4 != 0.0 else 0
+
+                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
+                                scale = radial / r if r > 1e-8 else 1.0
+                                x_d = scale * x
+                                y_d = scale * y
+
+                            # Kannala-Brandt #
+                            elif camera_model == "Kannala":
+                                # Radial distortion coefficients
+                                if support_external_parameters:
+                                    r = math.sqrt(x * x + y * y) / r0
+                                else:
+                                    r = math.sqrt(x * x + y * y)
+                                theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
+
+                                theta2 = theta * theta
+                                theta4 = theta2 * theta2
+                                theta6 = theta4 * theta2
+                                theta8 = theta6 * theta2
+                                theta10 = theta8 * theta2
+                                theta12 = theta10 * theta2
+                                theta14 = theta12 * theta2
+                                theta16 = theta14 * theta2
+
+                                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
+                                scale = radial / r if r > 1e-8 else 1.0
+                                x_r = scale * x
+                                y_r = scale * y
+
+                                # Tangent distortion coefficients
+                                if support_external_parameters:
+                                    r2 = x_r * x_r + y_r * y_r
+                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
+                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r)
+                                else:
+                                    x_d = x_r
+                                    y_d = y_r
+
+                            elif camera_model == "MEI":
+                                x = x / math.sqrt(x * x + y * y + z * z)
+                                y = y / math.sqrt(x * x + y * y + z * z)
+                                z = z / math.sqrt(x * x + y * y + z * z)
+
+                                # Radial distortion coefficients
+                                d1 = (x * x + y * y + z * z)
+                                d2 = z + xi * math.sqrt(d1)
+                                x_r = x / d2
+                                y_r = y / d2
+
+                                # Tangent distortion coefficients
+                                if support_external_parameters:
+                                    r = math.sqrt(x_r * x_r + y_r * y_r) / r0
+                                else:
+                                    r = math.sqrt(x_r * x_r + y_r * y_r)
+                                r2 = r * r
+                                x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
+                                y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
+
+                            else:
+                                raise ValueError(
+                                    f"Unsupported camera model: {camera_model}.\n"
+                                    f"Supported models are 'Regular', 'Brown', 'Fisheye', 'Kannala', 'MEI'."
+                                )
+                        else:
+                            # If no distortion, just use the projected pixel directly
+                            x_d = x
+                            y_d = y
+
+                        # Convert back to pixel coordinates
+                        mv_points = np.array([x_d, y_d, 1, 1])
+                        mvp_points = projection_matrix @ mv_points
+                        annotation_pixels.append(mvp_points[:2])
+
+                    annotation_pixels = np.array(annotation_pixels)
+
+                # OpenCV MVP
+                else:
+                    if support_external_parameters:
+                        raise ValueError("OpenCV projection mode does not support external parameters.")
+
+                    mv = view_matrix @ model_matrix  # Model View matrix
+                    K = projection_matrix[:3, :3]  # Projection matrix
+
+                    # Check if the points are behind the camera
+                    points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+                    points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
+                    points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+                    if not np.all(points_3d[:, 2] > 0):
+                        continue  # Skip if any point is behind the camera
+
+                    # Option 1 - Apply MV on points manually
+                    # points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+                    # points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
+                    # points_3d = points_4d[:, :3]  # (N, 3)
+                    # object_points = points_3d.reshape(-1, 3)  # (N, 3)
+                    # rvec = np.zeros((3, 1), dtype=np.float64)
+                    # tvec = np.zeros((3, 1), dtype=np.float64)
+
+                    # Option 2 - Apply MV on points using OpenCV
+                    object_points = points.reshape(1, -1, 3)
+                    rvec = cv2.Rodrigues(mv[:3, :3])[0].astype(np.float64)  # Rotation vector
+                    tvec = mv[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
+
                     if apply_annotation_distortion:
-                        # Regular (OpenCV Regular camera) #
+                        # 2D camera #
                         if camera_model == "Regular":
-                            z = z if z != 0 else 1e-8  # Avoid division by zero
-                            x = x / z
-                            y = y / z
-
-                            # Radial distortion coefficients
-                            if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) / r0
-                            else:
-                                r = math.sqrt(x * x + y * y)
-
-                            r2 = r * r # if k1 != 0.0 else 0
-                            r4 = r2 * r2 # if k2 != 0.0 else 0
-                            r6 = r4 * r2 # if k3 != 0.0 else 0
-
-                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
-                            x_r = x * radial
-                            y_r = y * radial
-
-                            # Tangent distortion coefficients
-                            x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                            y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
-
-                        # Brown–Conrady #
-                        elif camera_model == "Brown":
-                            z = z if z != 0 else 1e-8  # Avoid division by zero
-                            x = x / z
-                            y = y / z
-
-                            # Radial distortion coefficients
-                            if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) / r0
-                            else:
-                                r = math.sqrt(x * x + y * y)
-
-                            r2 = r * r  # if k1 != 0.0 else 0
-                            r4 = r2 * r2  # if k2 != 0.0 else 0
-                            r6 = r4 * r2  # if k3 != 0.0 else 0
-                            r8 = r6 * r2  # if k4 != 0.0 else 0
-                            r10 = r8 * r2  # if k5 != 0.0 else 0
-                            r12 = r10 * r2  # if k6 != 0.0 else 0
-                            r14 = r12 * r2  # if k7 != 0.0 else 0
-                            r16 = r14 * r2  # if k8 != 0.0 else 0
-
-                            radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
-                            x_r = x * radial
-                            y_r = y * radial
-
-                            # Tangent distortion coefficients
-                            x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                            y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
-
-                        # Fisheye (OpenCV Fisheye camera) #
+                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                            (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
                         elif camera_model == "Fisheye":
-                            # Radial distortion coefficients
-                            if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) / r0
-                            else:
-                                r = math.sqrt(x * x + y * y)
-                            theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
-
-                            theta2 = theta * theta  # if k1 != 0.0 else 0
-                            theta4 = theta2 * theta2  # if k2 != 0.0 else 0
-                            theta6 = theta4 * theta2  # if k3 != 0.0 else 0
-                            theta8 = theta6 * theta2  # if k4 != 0.0 else 0
-
-                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
-                            scale = radial / r if r > 1e-8 else 1.0
-                            x_d = scale * x
-                            y_d = scale * y
-
-                        elif camera_model == "Kannala":
-                            # Radial distortion coefficients
-                            if support_external_parameters:
-                                r = math.sqrt(x * x + y * y) / r0
-                            else:
-                                r = math.sqrt(x * x + y * y)
-                            theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
-
-                            theta2 = theta * theta
-                            theta4 = theta2 * theta2
-                            theta6 = theta4 * theta2
-                            theta8 = theta6 * theta2
-                            theta10 = theta8 * theta2
-                            theta12 = theta10 * theta2
-                            theta14 = theta12 * theta2
-                            theta16 = theta14 * theta2
-
-                            radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
-                            scale = radial / r if r > 1e-8 else 1.0
-                            x_r = scale * x
-                            y_r = scale * y
-
-                            # Tangent distortion coefficients
-                            if support_external_parameters:
-                                r2 = x_r * x_r + y_r * y_r
-                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
-                                y_d = y_r + (p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r)
-                            else:
-                                x_d = x_r
-                                y_d = y_r
-
-                        elif camera_model == "MEI":
-                            x = x / math.sqrt(x * x + y * y + z * z)
-                            y = y / math.sqrt(x * x + y * y + z * z)
-                            z = z / math.sqrt(x * x + y * y + z * z)
-
-                            # Radial distortion coefficients
-                            d1 = (x * x + y * y + z * z)
-                            d2 = z + xi * math.sqrt(d1)
-                            x_r = x / d2
-                            y_r = y / d2
-
-                            # Tangent distortion coefficients
-                            if support_external_parameters:
-                                r = math.sqrt(x_r * x_r + y_r * y_r) / r0
-                            else:
-                                r = math.sqrt(x_r * x_r + y_r * y_r)
-                            r2 = r * r
-                            x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
-                            y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
-
+                            D = np.array([k1, k2, k3, k4], dtype=np.float64)
+                            (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
                         else:
                             raise ValueError(
                                 f"Unsupported camera model: {camera_model}.\n"
-                                f"Supported models are 'Regular', 'Brown', 'Fisheye', 'Kannala', 'MEI'."
+                                f"Supported models are 'Regular' and 'Fisheye'."
                             )
                     else:
-                        # If no distortion, just use the projected pixel directly
-                        x_d = x
-                        y_d = y
-
-                    # Convert back to pixel coordinates
-                    mv_points = np.array([x_d, y_d, 1, 1])
-                    mvp_points = projection_matrix @ mv_points
-                    annotation_pixels.append(mvp_points[:2])
-
-                annotation_pixels = np.array(annotation_pixels)
-
-            # OpenCV MVP
-            else:
-                if support_external_parameters:
-                    raise ValueError("OpenCV projection mode does not support external parameters.")
-
-                mv = view_matrix @ model_matrix  # Model View matrix
-                K = projection_matrix[:3, :3]  # Projection matrix
-
-                # Check if the points are behind the camera
-                points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-                points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
-                points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
-                if not np.all(points_3d[:, 2] > 0):
-                    continue  # Skip if any point is behind the camera
-
-                # Option 1 - Apply MV on points manually
-                # points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-                # points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
-                # points_3d = points_4d[:, :3]  # (N, 3)
-                # object_points = points_3d.reshape(-1, 3)  # (N, 3)
-                # rvec = np.zeros((3, 1), dtype=np.float64)
-                # tvec = np.zeros((3, 1), dtype=np.float64)
-
-                # Option 2 - Apply MV on points using OpenCV
-                object_points = points.reshape(1, -1, 3)
-                rvec = cv2.Rodrigues(mv[:3, :3])[0].astype(np.float64)  # Rotation vector
-                tvec = mv[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
-
-                if apply_annotation_distortion:
-                    # 2D camera #
-                    if camera_model == "Regular":
-                        D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                        D = np.zeros((5,), dtype=np.float64)
                         (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
-                    elif camera_model == "Fisheye":
-                        D = np.array([k1, k2, k3, k4], dtype=np.float64)
-                        (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+
+                    # points_2d: (N, 1, 2) - OpenCV format
+                    annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+
+
+                # Select annotation option based on the projection mode
+                if project_remotely:
+                    if apply_annotation_distortion:
+                        option = "Polygons"
                     else:
-                        raise ValueError(
-                            f"Unsupported camera model: {camera_model}.\n"
-                            f"Supported models are 'Regular' and 'Fisheye'."
+                        option = "Cube"
+                else:
+                    option = "Points"
+
+                # Find Front and Back points (Front = points with smaller Z - closer to camera)
+                depths = points_3d[:, 2]  # Camera-space Z
+
+                # create annotation if it is inside the image boundaries
+                annotations = self.create_annotation(
+                    option=option,
+                    label=annotation_data["label"],
+                    annotation_pixels=annotation_pixels,
+                    depths=depths,
+                    width=item.width,
+                    height=item.height,
+                    full_annotations_only=full_annotations_only
+                )
+                # if cube annotation is not None add it to the item
+                if annotations is None:
+                    continue
+
+                if project_remotely is True:
+                    # Add annotation to the item builder
+                    for annotation in annotations:
+                        images_map[item_id]["builder"].add(
+                            annotation_definition=annotation,
+                            object_id=annotation_data["object_id"],
+                            object_visible=annotation_data["object_visible"]
                         )
                 else:
-                    D = np.zeros((5,), dtype=np.float64)
-                    (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
+                    anno_points_2d = []
+                    for annotation in annotations:
+                        anno_points_2d.append(annotation.geo)
+                    image_path = images_map.get(item_id, dict()).get("output_path")
+                    image = cv2.imread(image_path)
 
-                # points_2d: (N, 1, 2) - OpenCV format
-                annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+                    edges = [
+                        (0, 1), (1, 2), (2, 3), (3, 0),  # front face
+                        (4, 5), (5, 6), (6, 7), (7, 4),  # back face
+                        (0, 4), (1, 5), (2, 6), (3, 7)  # connecting edges
+                    ]
 
-            # Select annotation option based on the projection mode
-            if project_remotely:
-                if apply_annotation_distortion:
-                    option = "Polygons"
-                else:
-                    option = "Cube"
-            else:
-                option = "Points"
-
-            # Find Front and Back points (Front = points with smaller Z - closer to camera)
-            depths = points_3d[:, 2]  # Camera-space Z
-
-            # create annotation if it is inside the image boundaries
-            annotations = self.create_annotation(
-                option=option,
-                label=annotation_data["label"],
-                annotation_pixels=annotation_pixels,
-                depths=depths,
-                width=item.width,
-                height=item.height,
-                full_annotations_only=full_annotations_only
-            )
-            # if cube annotation is not None add it to the item
-            if annotations is None:
-                continue
-
-            if project_remotely is True:
-                # Add annotation to the item builder
-                for annotation in annotations:
-                    images_map[item_id]["builder"].add(
-                        annotation_definition=annotation,
-                        object_id=annotation_data["object_id"],
-                        object_visible=annotation_data["object_visible"]
-                    )
-            else:
-                anno_points_2d = []
-                for annotation in annotations:
-                    anno_points_2d.append(annotation.geo)
-                image_path = images_map.get(item_id, dict()).get("output_path")
-                image = cv2.imread(image_path)
-
-                edges = [
-                    (0, 1), (1, 2), (2, 3), (3, 0),  # front face
-                    (4, 5), (5, 6), (6, 7), (7, 4),  # back face
-                    (0, 4), (1, 5), (2, 6), (3, 7)  # connecting edges
-                ]
-
-                for start_idx, end_idx in edges:
-                    pt1 = tuple(np.round(anno_points_2d[start_idx]).astype(int))
-                    pt2 = tuple(np.round(anno_points_2d[end_idx]).astype(int))
-                    color = self.labels_colors.get(annotation_data["label"], (255, 255, 255))  # Default color is white if label not found
-                    cv2.line(image, pt1, pt2, color=color, thickness=2)
-                cv2.imwrite(image_path, image)
+                    for start_idx, end_idx in edges:
+                        pt1 = tuple(np.round(anno_points_2d[start_idx]).astype(int))
+                        pt2 = tuple(np.round(anno_points_2d[end_idx]).astype(int))
+                        color = self.labels_colors.get(annotation_data["label"], (255, 255, 255))  # Default color is white if label not found
+                        cv2.line(image, pt1, pt2, color=color, thickness=2)
+                    cv2.imwrite(image_path, image)
 
         # Upload annotation to the item
         if project_remotely is True:
@@ -582,22 +730,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         return frame_annotations_per_frame
 
-    def project_annotations_to_2d(self, item: dl.Item,
-                                  full_annotations_only: bool = False,
-                                  project_remotely: bool = True,
-                                  support_external_parameters: bool = False):
+    def project_annotations_to_2d(self, item: dl.Item, flags: dict):
         """
         Function that projects annotations to 2D from the original lidar scene annotations.
         :param item: DL lidar scene item
-        :param full_annotations_only: if True, only full annotations will be projected to 2D
-        :param project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
+        :param flags: dictionary with flags:
+        - full_annotations_only: if True, only full annotations will be projected to 2D
+        - project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
+        - support_external_parameters: if True, support external parameters for the projection (Like: k4, k5, k6, k7, k8)
+        - apply_image_undistortion: if True, apply image undistortion to the images before projection
+        - apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
         :return: None
         """
-        # TODO: Debug
-        undistort_mode = "Manual"
-        apply_image_undistortion = True
-        apply_annotation_distortion = False
-
         # Download lidar scene video's json
         items_path = os.path.join(os.getcwd(), item.id)
         frames_item_path = item.download(local_path=items_path, overwrite=True)
@@ -618,6 +762,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         # get all camera calibrations
         camera_calibrations = lidar_video_content.get('cameras', list())
+        cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
         frames_count = len(lidar_video_content.get('frames', list()))
         for frame_num in range(frames_count):
             print("Frame number:", frame_num)
@@ -629,151 +774,26 @@ class AnnotationProjection(dl.BaseServiceRunner):
             #################
             # Handle Images #
             #################
-
             frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
-            cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
-
-            images_map = {}
-            for idx, image_calibrations in enumerate(frame_images):
-                # get image and camera calibrations
-                item_id = image_calibrations.get('image_id')
-                item = dl.items.get(item_id=item_id)
-                images_map[item_id] = {
-                    "item": item
-                }
-                if project_remotely is True:
-                    images_map[item_id]["path"] = None
-                elif project_remotely is False:
-                    image_path = str(os.path.join(frames_item.id, item.filename[1:]))
-                    images_map[item_id]["path"] = image_path
-                    if not os.path.exists(image_path):
-                        download_image_path = os.path.dirname(image_path)
-                        item.download(local_path=download_image_path)
-
-                        # Remove distortion from image
-                        if apply_image_undistortion:
-                            camera_id = image_calibrations.get('camera_id')
-                            camera_calibrations = cameras_map.get(camera_id)
-                            sensors_data = camera_calibrations.get('sensorsData')
-
-                            # calculate projection matrix (Default values: Orthographic projection)
-                            intrinsic_data = sensors_data.get('intrinsicData', dict())
-                            fx = intrinsic_data.get('fx', 1.0)
-                            fy = intrinsic_data.get('fy', 1.0)
-                            s = intrinsic_data.get('skew', 0.0)
-                            cx = intrinsic_data.get('cx', 0.0)
-                            cy = intrinsic_data.get('cy', 0.0)
-                            K = np.array([
-                                [fx, s, cx],
-                                [0, fy, cy],
-                                [0, 0, 1]
-                            ])
-
-                            camera_distortion = intrinsic_data.get('distortion', dict())
-                            k1 = camera_distortion["k1"]
-                            k2 = camera_distortion["k2"]
-                            k3 = camera_distortion["k3"]
-                            k4 = camera_distortion.get("k4", 0.0)  # Optional, if not present, set to 0
-                            k5 = camera_distortion.get("k5", 0.0)  # Optional, if not present, set to 0
-                            k6 = camera_distortion.get("k6", 0.0)  # Optional, if not present, set to 0
-                            k7 = camera_distortion.get("k7", 0.0)  # Optional, if not present, set to 0
-                            k8 = camera_distortion.get("k8", 0.0)  # Optional, if not present, set to 0
-                            p1 = camera_distortion.get("p1", 0.0)
-                            p2 = camera_distortion.get("p2", 0.0)
-                            xi = camera_distortion.get('xi', 1.0)
-                            # factor_m = camera_distortion.get('m', 1.0)
-
-                            # OpenCV distortion coefficients
-                            if undistort_mode == "Manuel":
-                                h, w = item.height, item.width
-                                k = [k1, k2, k3, k4, k5, k6, k7, k8]  # Only first three coefficients are used
-                                map_x = np.zeros((h, w), dtype=np.float32)
-                                map_y = np.zeros((h, w), dtype=np.float32)
-                                for y in range(h):
-                                    for x in range(w):
-                                        # Normalized coordinates
-                                        x_n = (x - cx) / fx
-                                        y_n = (y - cy) / fy
-                                        r_u = np.sqrt(x_n ** 2 + y_n ** 2)
-                                        theta = np.arctan(r_u) if r_u != 0 else 0
-
-                                        # Distorted radius via 8-coeff model
-                                        theta_powers = [theta ** (2 * i + 1) for i in range(8)]
-                                        r_d = theta + sum(k[i] * theta_powers[i] for i in range(8))
-
-                                        scale = r_d / r_u if r_u != 0 else 1
-                                        x_d = x_n * scale
-                                        y_d = y_n * scale
-
-                                        map_x[y, x] = fx * x_d + cx
-                                        map_y[y, x] = fy * y_d + cy
-
-                                image = cv2.imread(image_path)
-                                coords = [map_y.ravel(), map_x.ravel()]
-                                undistorted_r = map_coordinates(image[:, :, 0], coords, order=1, mode='reflect').reshape(
-                                    (h, w))
-                                undistorted_g = map_coordinates(image[:, :, 1], coords, order=1, mode='reflect').reshape(
-                                    (h, w))
-                                undistorted_b = map_coordinates(image[:, :, 2], coords, order=1, mode='reflect').reshape(
-                                    (h, w))
-                                undistorted = np.stack([undistorted_r, undistorted_g, undistorted_b], axis=2).astype(
-                                    np.uint8)
-
-                                cv2.imwrite(image_path, undistorted)
-
-                            elif undistort_mode == "OpenCV":
-                                # Distortion coefficients
-                                D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-
-                                # Original distorted image
-                                image = cv2.imread(image_path)
-                                h, w = image.shape[:2]
-
-                                # Compute optimal rectified camera matrix (keeps FOV)
-                                new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w,h))
-
-                                # Undistort
-                                undistorted = cv2.undistort(image, K, D, None, new_K)
-
-                                # Save or display
-                                x, y, w, h = roi
-                                undistorted = undistorted[y:y + h, x:x + w]
-                                cv2.imwrite(image_path, undistorted)
-
-                            else:
-                                raise ValueError(
-                                    f"Unsupported undistort mode: {undistort_mode}. "
-                                    f"Supported modes are 'Manual' and 'OpenCV'."
-                                )
-
-
-                    # Overwrite annotated image
-                    image_path = str(os.path.join(frames_item.id, item.filename[1:]))
-                    image = cv2.imread(image_path)
-                    img_name, img_ext = os.path.splitext(image_path)
-                    output_image_path = f"{img_name}_annotated{img_ext}"
-                    cv2.imwrite(output_image_path, image)
-
-                    images_map[item_id] = {
-                        "item": item,
-                        "path": image_path,
-                        "output_path": output_image_path
-                    }
-                else:
-                    raise ValueError("project_remotely must be either True or False.")
-
             frame_annotations = frame_annotations_per_frame.get(frame_num, list())
-            for annotation_data in tqdm(frame_annotations):
-                self.calculate_frame_annotations(
-                    annotation_data=annotation_data,
-                    frame_images=frame_images,
-                    images_map=images_map,
-                    cameras_map=cameras_map,
-                    full_annotations_only=full_annotations_only,
-                    apply_annotation_distortion=apply_annotation_distortion,
-                    project_remotely=project_remotely,
-                    support_external_parameters=support_external_parameters
-                )
+            self.handle_frame(
+                cameras_map=cameras_map,
+                frame_images=frame_images,
+                frame_annotations=frame_annotations,
+                flags=flags
+            )
+
+            # for annotation_data in tqdm(frame_annotations):
+            #     self.calculate_frame_annotations(
+            #         annotation_data=annotation_data,
+            #         frame_images=frame_images,
+            #         cameras_map=cameras_map,
+            #         full_annotations_only=full_annotations_only,
+            #         apply_image_undistortion=apply_image_undistortion,
+            #         apply_annotation_distortion=apply_annotation_distortion,
+            #         project_remotely=project_remotely,
+            #         support_external_parameters=support_external_parameters
+            #     )
 
 
 if __name__ == "__main__":
@@ -781,14 +801,14 @@ if __name__ == "__main__":
     dl.setenv('rc')
     item_id = '68415b9d1bd0d57f611190a1'
     frames_item = dl.items.get(item_id=item_id)
-    full_annotations_only = False
-    project_remotely = False
-    support_external_parameters = True
+    flags = dict(
+        full_annotations_only=False,
+        project_remotely=False,
+        support_external_parameters=True
+    )
 
     runner = AnnotationProjection(dataset=frames_item.dataset)
     runner.project_annotations_to_2d(
         item=frames_item,
-        full_annotations_only=full_annotations_only,
-        project_remotely=project_remotely,
-        support_external_parameters=support_external_parameters
+        flags=flags
     )
