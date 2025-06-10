@@ -242,6 +242,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
             # r0 = camera_distortion.get('r0', 1.0)
             r0 = 1.0
 
+            # Regular (OpenCV Regular camera) #
+            # Brown–Conrady #
+            # Fisheye (OpenCV Fisheye camera) #
+            # Kannala-Brandt #
+            # MEI #
+
             # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
             # camera_model = camera_distortion.get('model', 'Regular')
             camera_model = "Kannala"
@@ -251,7 +257,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
             ################
 
             if project_remotely is True:
+                # No undistortion support for remote image
                 images_map[item_id]["path"] = None
+
             elif project_remotely is False:
                 # Set image paths
                 image_path = str(os.path.join(frames_item.id, item.filename[1:]))
@@ -300,27 +308,123 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     # OpenCV distortion coefficients
                     if undistort_mode == "Manual":
                         h, w = item.height, item.width
-                        k = [k1, k2, k3, k4, k5, k6, k7, k8]  # Only first three coefficients are used
                         map_x = np.zeros((h, w), dtype=np.float32)
                         map_y = np.zeros((h, w), dtype=np.float32)
-                        for y in range(h):
-                            for x in range(w):
-                                # Normalized coordinates
-                                x_n = (x - cx) / fx
-                                y_n = (y - cy) / fy
-                                r_u = np.sqrt(x_n ** 2 + y_n ** 2)
-                                theta = np.arctan(r_u) if r_u != 0 else 0
 
-                                # Distorted radius via 8-coeff model
-                                theta_powers = [theta ** (2 * i + 1) for i in range(8)]
-                                r_d = theta + sum(k[i] * theta_powers[i] for i in range(8))
+                        if camera_model == "Regular":
+                            for y in range(h):
+                                for x in range(w):
+                                    # Normalized coordinates
+                                    x_n = (x - cx) / fx
+                                    y_n = (y - cy) / fy
 
-                                scale = r_d / r_u if r_u != 0 else 1
-                                x_d = x_n * scale
-                                y_d = y_n * scale
+                                    r = math.sqrt(x_n * x_n + y_n * y_n)
+                                    r2 = r * r  # if k1 != 0.0 else 0
+                                    r4 = r2 * r2  # if k2 != 0.0 else 0
+                                    r6 = r4 * r2  # if k3 != 0.0 else 0
 
-                                map_x[y, x] = fx * x_d + cx
-                                map_y[y, x] = fy * y_d + cy
+                                    # Radial distortion
+                                    radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
+
+                                    # Tangential distortion
+                                    x_t = 2 * p1 * x_n * y_n + p2 * (r2 + 2 * x_n ** 2)
+                                    y_t = p1 * (r2 + 2 * y_n ** 2) + 2 * p2 * x_n * y_n
+
+                                    x_d = x_n * radial + x_t
+                                    y_d = y_n * radial + y_t
+
+                                    map_x[y, x] = fx * x_d + cx
+                                    map_y[y, x] = fy * y_d + cy
+
+                        if camera_model == "Brown":
+                            for y in range(h):
+                                for x in range(w):
+                                    # Normalized coordinates
+                                    x_n = (x - cx) / fx
+                                    y_n = (y - cy) / fy
+
+                                    r = math.sqrt(x_n * x_n + y_n * y_n)
+                                    r2 = r * r  # if k1 != 0.0 else 0
+                                    r4 = r2 * r2  # if k2 != 0.0 else 0
+                                    r6 = r4 * r2  # if k3 != 0.0 else 0
+                                    r8 = r6 * r2  # if k4 != 0.0 else 0
+                                    r10 = r8 * r2  # if k5 != 0.0 else 0
+                                    r12 = r10 * r2  # if k6 != 0.0 else 0
+                                    r14 = r12 * r2  # if k7 != 0.0 else 0
+                                    r16 = r14 * r2  # if k8 != 0.0 else 0
+
+                                    # Radial distortion
+                                    radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
+
+                                    # Tangential distortion
+                                    x_t = 2 * p1 * x_n * y_n + p2 * (r2 + 2 * x_n ** 2)
+                                    y_t = p1 * (r2 + 2 * y_n ** 2) + 2 * p2 * x_n * y_n
+
+                                    x_d = x_n * radial + x_t
+                                    y_d = y_n * radial + y_t
+
+                                    map_x[y, x] = fx * x_d + cx
+                                    map_y[y, x] = fy * y_d + cy
+
+                        elif camera_model == "Fisheye":
+                            k = [k1, k2, k3, k4]
+                            for y in range(h):
+                                for x in range(w):
+                                    # Normalized coordinates
+                                    x_n = (x - cx) / fx
+                                    y_n = (y - cy) / fy
+                                    r_u = np.sqrt(x_n ** 2 + y_n ** 2)
+                                    theta = np.arctan(r_u) if r_u != 0 else 0
+
+                                    # Distorted radius via 4-coeff model
+                                    theta_powers = [theta ** (2 * i + 1) for i in range(len(k))]
+                                    r_d = theta + sum(k[i] * theta_powers[i] for i in range(len(k)))
+
+                                    scale = r_d / r_u if r_u != 0 else 1
+                                    x_d = x_n * scale
+                                    y_d = y_n * scale
+
+                                    map_x[y, x] = fx * x_d + cx
+                                    map_y[y, x] = fy * y_d + cy
+
+                        elif camera_model == "Kannala":
+                            k = [k1, k2, k3, k4, k5, k6, k7, k8]
+                            for y in range(h):
+                                for x in range(w):
+                                    # Normalized coordinates
+                                    x_n = (x - cx) / fx
+                                    y_n = (y - cy) / fy
+                                    r_u = np.sqrt(x_n ** 2 + y_n ** 2)
+                                    theta = np.arctan(r_u) if r_u != 0 else 0
+
+                                    # Distorted radius via 8-coeff model
+                                    theta_powers = [theta ** (2 * i + 1) for i in range(len(k))]
+                                    r_d = theta + sum(k[i] * theta_powers[i] for i in range(len(k)))
+
+                                    scale = r_d / r_u if r_u != 0 else 1
+                                    x_r = x_n * scale
+                                    y_r = y_n * scale
+
+                                    if support_external_parameters:
+                                        # Tangential distortion
+                                        r2 = x_r * x_r + y_r * y_r
+                                        x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
+                                        y_d = y_r + (p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r)
+                                    else:
+                                        x_d = x_r
+                                        y_d = y_r
+
+                                    map_x[y, x] = fx * x_d + cx
+                                    map_y[y, x] = fy * y_d + cy
+
+                        elif camera_model == "MEI":
+                            pass
+
+                        else:
+                            raise ValueError(
+                                f"Unsupported camera model: {camera_model}. "
+                                f"Supported models are 'Regular', 'Brown', 'Fisheye', 'Kannala', and 'MEI'."
+                            )
 
                         image = cv2.imread(image_path)
                         coords = [map_y.ravel(), map_x.ravel()]
@@ -406,7 +510,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     for point_3d in points_3d:
                         (x, y, z) = point_3d
                         if apply_annotation_distortion:
-                            # Regular (OpenCV Regular camera) #
                             if camera_model == "Regular":
                                 z = z if z != 0 else 1e-8  # Avoid division by zero
                                 x = x / z
@@ -430,7 +533,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
                                 y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
 
-                            # Brown–Conrady #
                             elif camera_model == "Brown":
                                 z = z if z != 0 else 1e-8  # Avoid division by zero
                                 x = x / z
@@ -459,7 +561,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
                                 y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
 
-                            # Fisheye (OpenCV Fisheye camera) #
                             elif camera_model == "Fisheye":
                                 # Radial distortion coefficients
                                 if support_external_parameters:
@@ -478,7 +579,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 x_d = scale * x
                                 y_d = scale * y
 
-                            # Kannala-Brandt #
                             elif camera_model == "Kannala":
                                 # Radial distortion coefficients
                                 if support_external_parameters:
