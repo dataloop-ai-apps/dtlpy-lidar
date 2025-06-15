@@ -444,25 +444,27 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     # Normalized pixel coordinates
                                     x = (i - cx) / fx
                                     y = (j - cy) / fy
-                                    r2 = x * x + y * y
 
-                                    norm = np.sqrt(r2 + 1)
+                                    norm = np.sqrt( x * x + y * y + 1 * 1)
                                     x_s = x / norm
                                     y_s = y / norm
                                     z_s = 1 / norm
 
                                     # Project onto virtual camera
-                                    denom = z_s + xi * norm
+                                    denom = z_s + xi
                                     x_m = x_s / denom
                                     y_m = y_s / denom
 
                                     # Apply radial + tangential distortion (optional)
-                                    r_m2 = x_m ** 2 + y_m ** 2
-                                    r_m4 = r_m2 ** 2
-                                    r_m6 = r_m2 ** 3
-                                    radial = 1 + k1 * r_m2 + k2 * r_m4 + k3 * r_m6
-                                    x_d = x_m * radial + 2 * p1 * x_m * y_m + p2 * (r_m2 + 2 * x_m ** 2)
-                                    y_d = y_m * radial + p1 * (r_m2 + 2 * y_m ** 2) + 2 * p2 * x_m * y_m
+                                    r2 = x_m * x_m + y_m * y_m
+                                    r4 = r2 * r2
+                                    radial = 1 + k1 * r2 + k2 * r4
+                                    x_d = x_m * radial
+                                    y_d = y_m * radial
+
+                                    if support_external_parameters:
+                                        x_d = x_d + (2 * p1 * x_m * y_m + p2 * (r2 + 2 * x_m * x_m))
+                                        y_d = x_d + (p1 * (r2 + 2 * y_m * y_m) + 2 * p2 * x_m * y_m)
 
                                     # Project back to image plane
                                     map_x[j, i] = fx * x_d + cx
@@ -659,20 +661,31 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_d = y_r
 
                             elif camera_model == "MEI":
-                                # Radial distortion coefficients
-                                d1 = math.sqrt(x * x + y * y + z * z)
-                                d2 = z + xi * d1
-                                x_r = x / d2
-                                y_r = y / d2
+                                # Based on the MEI model:
+                                # https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py
+                                norm = float(np.linalg.norm(np.array([x, y, z])))
+                                x = x / norm
+                                y = y / norm
+                                z = z / norm
+
+                                x /= z + xi
+                                y /= z + xi
 
                                 # Tangent distortion coefficients
+                                r2 = x * x + y * y
+                                x *= 1 + k1 * r2 + k2 * r2 * r2
+                                y *= 1 + k1 * r2 + k2 * r2 * r2
+
+                                x_r = x
+                                y_r = y
+                                # z_r = norm * point_3d[:, 2] / np.abs(point_3d[:, 2])
+
                                 if support_external_parameters:
-                                    r = math.sqrt(x_r * x_r + y_r * y_r) / r0
+                                    x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
+                                    y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
                                 else:
-                                    r = math.sqrt(x_r * x_r + y_r * y_r)
-                                r2 = r * r
-                                x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
-                                y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
+                                    x_d = x_r
+                                    y_d = y_r
 
                             else:
                                 raise ValueError(
