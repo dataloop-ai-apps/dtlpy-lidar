@@ -455,16 +455,19 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     x_m = x_s / denom
                                     y_m = y_s / denom
 
-                                    # Apply radial + tangential distortion (optional)
                                     r2 = x_m * x_m + y_m * y_m
                                     r4 = r2 * r2
                                     radial = 1 + k1 * r2 + k2 * r4
-                                    x_d = x_m * radial
-                                    y_d = y_m * radial
+                                    x_r = x_m * radial
+                                    y_r = y_m * radial
 
+                                    # Tangent distortion coefficients
                                     if support_external_parameters:
-                                        x_d = x_d + (2 * p1 * x_m * y_m + p2 * (r2 + 2 * x_m * x_m))
-                                        y_d = x_d + (p1 * (r2 + 2 * y_m * y_m) + 2 * p2 * x_m * y_m)
+                                        x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r * x_r))
+                                        y_d = y_r + (p1 * (r2 + 2 * y_r * y_r) + 2 * p2 * x_r * y_r)
+                                    else:
+                                        x_d = x_r
+                                        y_d = y_r
 
                                     # Project back to image plane
                                     map_x[j, i] = fx * x_d + cx
@@ -668,20 +671,19 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y = y / norm
                                 z = z / norm
 
+                                # Radial distortion coefficients
                                 x /= z + xi
                                 y /= z + xi
 
                                 r2 = x * x + y * y
-                                x *= 1 + k1 * r2 + k2 * r2 * r2
-                                y *= 1 + k1 * r2 + k2 * r2 * r2
-
-                                x_r = x
-                                y_r = y
+                                x_r = x * (1 + k1 * r2 + k2 * r2 * r2)
+                                y_r = y * (1 + k1 * r2 + k2 * r2 * r2)
                                 # z_r = norm * point_3d[:, 2] / np.abs(point_3d[:, 2])
 
+                                # Tangent distortion coefficients
                                 if support_external_parameters:
-                                    x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r ** 2))
-                                    y_d = y_r + (p1 * (r2 + 2 * y_r ** 2) + 2 * p2 * x_r * y_r)
+                                    x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r * x_r))
+                                    y_d = y_r + (p1 * (r2 + 2 * y_r * y_r) + 2 * p2 * x_r * y_r)
                                 else:
                                     x_d = x_r
                                     y_d = y_r
