@@ -671,7 +671,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 x /= z + xi
                                 y /= z + xi
 
-                                # Tangent distortion coefficients
                                 r2 = x * x + y * y
                                 x *= 1 + k1 * r2 + k2 * r2 * r2
                                 y *= 1 + k1 * r2 + k2 * r2 * r2
