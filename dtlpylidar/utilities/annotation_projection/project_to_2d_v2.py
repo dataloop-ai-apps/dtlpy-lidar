@@ -250,7 +250,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
             # camera_model = camera_distortion.get('model', 'Regular')
-            camera_model = "Kannala"
+            camera_model = "MEI"
 
             ################
             # Undistortion #
@@ -445,6 +445,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     x = (i - cx) / fx
                                     y = (j - cy) / fy
 
+                                    # Radial distortion coefficients
                                     norm = np.sqrt( x * x + y * y + 1 * 1)
                                     x_s = x / norm
                                     y_s = y / norm
@@ -934,7 +935,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '68415b9d1bd0d57f611190a1'
+    item_id = '684f1f3f7badcb1e6a2756a8'
     frames_item = dl.items.get(item_id=item_id)
     flags = dict(
         full_annotations_only=False,
