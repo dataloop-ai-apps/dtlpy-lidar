@@ -228,9 +228,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             camera_distortion = intrinsic_data.get('distortion', dict())
             # factor_m = camera_distortion.get('m', 1.0)
-            k1 = camera_distortion["k1"] * factor_m
-            k2 = camera_distortion["k2"] * factor_m
-            k3 = camera_distortion["k3"] * factor_m
+            k1 = camera_distortion.get("k1", 0.0) * factor_m
+            k2 = camera_distortion.get("k2", 0.0) * factor_m
+            k3 = camera_distortion.get("k3", 0.0) * factor_m
             k4 = camera_distortion.get("k4", 0.0) * factor_m  # Optional, if not present, set to 0
             k5 = camera_distortion.get("k5", 0.0) * factor_m  # Optional, if not present, set to 0
             k6 = camera_distortion.get("k6", 0.0) * factor_m  # Optional, if not present, set to 0
@@ -238,7 +238,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             k8 = camera_distortion.get("k8", 0.0) * factor_m  # Optional, if not present, set to 0
             p1 = camera_distortion.get("p1", 0.0) * factor_m
             p2 = camera_distortion.get("p2", 0.0) * factor_m
-            xi = camera_distortion.get('xi', 1.0)
+            xi = camera_distortion.get('xi', 1.0) * factor_m
             # r0 = camera_distortion.get('r0', 1.0)
             r0 = 1.0
 
