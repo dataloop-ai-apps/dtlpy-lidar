@@ -37,33 +37,21 @@ class Intrinsic:
 
 
 class Distortion:
-    def __init__(self, k1=0.0, k2=0.0, k3=0.0, p1=0.0, p2=0.0):
+    def __init__(self, **kwargs):
         """
-        Distortion matrix parameters
-        :param k1:
-        :param k2:
-        :param k3:
-        :param p1:
-        :param p2:
+        Distortion parameters. For example:\n
+        Radial distortion coefficients: k1, k2, k3, k4, k5, k6, k7, k8.\n
+        Tangential distortion coefficients: p1, p2.
         """
-        self.k1 = k1
-        self.k2 = k2
-        self.k3 = k3
-        self.p1 = p1
-        self.p2 = p2
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def to_json(self):
         """
         Distortion object to dict
         :return:
         """
-        return {
-            'k1': self.k1,
-            'k2': self.k2,
-            'k3': self.k3,
-            'p1': self.p1,
-            'p2': self.p2
-        }
+        return self.__dict__
 
 
 class LidarCameraData:

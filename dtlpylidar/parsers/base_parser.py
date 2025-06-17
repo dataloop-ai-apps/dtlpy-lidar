@@ -91,17 +91,14 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
                     w=image_details.get("extrinsics", dict()).get("rotation").get("w", 1)
                 )
                 camera_intrinsic = camera_calibrations.Intrinsic(
-                    fx=image_details.get("intrinsics", dict()).get("fx", 0),
-                    fy=image_details.get("intrinsics", dict()).get("fy", 0),
+                    fx=image_details.get("intrinsics", dict()).get("fx", 1),
+                    fy=image_details.get("intrinsics", dict()).get("fy", 1),
                     cx=image_details.get("intrinsics", dict()).get("cx", 0),
-                    cy=image_details.get("intrinsics", dict()).get("cy", 0)
+                    cy=image_details.get("intrinsics", dict()).get("cy", 0),
+                    skew=image_details.get("intrinsics", dict()).get("skew", 0)
                 )
                 camera_distortion = camera_calibrations.Distortion(
-                    k1=image_details.get("distortion", dict()).get("k1", 0),
-                    k2=image_details.get("distortion", dict()).get("k2", 0),
-                    k3=image_details.get("distortion", dict()).get("k3", 0),
-                    p1=image_details.get("distortion", dict()).get("p1", 0),
-                    p2=image_details.get("distortion", dict()).get("p2", 0)
+                    **image_details.get("distortion", dict())
                 )
 
                 lidar_camera = camera_calibrations.LidarCameraData(
