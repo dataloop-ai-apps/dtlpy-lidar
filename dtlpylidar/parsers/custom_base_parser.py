@@ -173,7 +173,8 @@ class CustomBaseParser(dl.BaseServiceRunner):
                     fx=intrinsics_json_data.get("fx", 1),
                     fy=intrinsics_json_data.get("fy", 1),
                     cx=intrinsics_json_data.get("cx", 0),
-                    cy=intrinsics_json_data.get("cy", 0)
+                    cy=intrinsics_json_data.get("cy", 0),
+                    skew=intrinsics_json_data.get("skew", 0)
                 )
 
                 # Get lidar transform for the current camera frame
