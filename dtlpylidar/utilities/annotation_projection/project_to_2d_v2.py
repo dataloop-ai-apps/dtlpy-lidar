@@ -919,18 +919,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 flags=flags
             )
 
-            # for annotation_data in tqdm(frame_annotations):
-            #     self.calculate_frame_annotations(
-            #         annotation_data=annotation_data,
-            #         frame_images=frame_images,
-            #         cameras_map=cameras_map,
-            #         full_annotations_only=full_annotations_only,
-            #         apply_image_undistortion=apply_image_undistortion,
-            #         apply_annotation_distortion=apply_annotation_distortion,
-            #         project_remotely=project_remotely,
-            #         support_external_parameters=support_external_parameters
-            #     )
-
 
 if __name__ == "__main__":
     # frames json item ID
