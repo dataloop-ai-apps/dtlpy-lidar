@@ -81,15 +81,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         if option == "Cube":
             # create cube annotation
-            cube = dl.Cube(label=label,
-                           front_tl=front_tl,
-                           front_tr=front_tr,
-                           front_br=front_br,
-                           front_bl=front_bl,
-                           back_tl=back_tl,
-                           back_tr=back_tr,
-                           back_br=back_br,
-                           back_bl=back_bl)
+            cube = dl.Cube(
+                label=label,
+                front_tl=front_tl,
+                front_tr=front_tr,
+                front_br=front_br,
+                front_bl=front_bl,
+                back_tl=back_tl,
+                back_tr=back_tr,
+                back_br=back_br,
+                back_bl=back_bl
+            )
             return [cube]
 
         elif option == "Polygons":
@@ -735,7 +737,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 depths = points_3d[:, 2]  # Camera-space Z
 
                 # create annotation if it is inside the image boundaries
-                annotations = self.create_annotation(
+                annotation_definitions = self.create_annotation(
                     option=option,
                     label=annotation_data["label"],
                     annotation_pixels=annotation_pixels,
@@ -745,21 +747,34 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     full_annotations_only=full_annotations_only
                 )
                 # if cube annotation is not None add it to the item
-                if annotations is None:
+                if annotation_definitions is None:
                     continue
 
                 if project_remotely is True:
                     # Add annotation to the item builder
-                    for annotation in annotations:
+                    for annotation_definition in annotation_definitions:
                         images_map[item_id]["builder"].add(
-                            annotation_definition=annotation,
+                            annotation_definition=annotation_definition,
                             object_id=annotation_data["object_id"],
                             object_visible=annotation_data["object_visible"]
                         )
                 else:
-                    anno_points_2d = []
-                    for annotation in annotations:
-                        anno_points_2d.append(annotation.geo)
+                    annotation_points_2d = []
+                    for annotation_definition in annotation_definitions:
+                        if isinstance(annotation_definition, dl.Cube):
+                            annotation_definition_geo = [
+                                annotation_definition.front_tl,
+                                annotation_definition.front_tr,
+                                annotation_definition.front_br,
+                                annotation_definition.front_bl,
+                                annotation_definition.back_tl,
+                                annotation_definition.back_tr,
+                                annotation_definition.back_br,
+                                annotation_definition.back_bl
+                            ]
+                        else:
+                            annotation_definition_geo = annotation_definition.geo
+                        annotation_points_2d.append(annotation_definition_geo)
                     image_path = images_map.get(item_id, dict()).get("output_path")
                     image = cv2.imread(image_path)
 
@@ -770,8 +785,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     ]
 
                     for start_idx, end_idx in edges:
-                        pt1 = tuple(np.round(anno_points_2d[start_idx]).astype(int))
-                        pt2 = tuple(np.round(anno_points_2d[end_idx]).astype(int))
+                        pt1 = tuple(np.round(annotation_points_2d[start_idx]).astype(int))
+                        pt2 = tuple(np.round(annotation_points_2d[end_idx]).astype(int))
                         color = labels_colors.get(annotation_data["label"], (255, 255, 255))  # Default color is white if label not found
                         cv2.line(image, pt1, pt2, color=color, thickness=2)
                     cv2.imwrite(image_path, image)
@@ -905,7 +920,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '68415b9d1bd0d57f611190a1'
+    item_id = '685822032da29c6039f80472'
     frames_item = dl.items.get(item_id=item_id)
     flags = dict(
         full_annotations_only=False,
