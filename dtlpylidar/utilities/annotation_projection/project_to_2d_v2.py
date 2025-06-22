@@ -403,23 +403,21 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     # Normalized pixel coordinates
                                     x = (i - cx) / fx
                                     y = (j - cy) / fy
+                                    z = 1.0
+
+                                    norm = float(np.linalg.norm(np.array([x, y, z])))
+                                    x = x / norm
+                                    y = y / norm
+                                    z = z / norm
 
                                     # Radial distortion coefficients
-                                    norm = np.sqrt( x * x + y * y + 1 * 1)
-                                    x_s = x / norm
-                                    y_s = y / norm
-                                    z_s = 1 / norm
+                                    x /= z + xi
+                                    y /= z + xi
 
-                                    # Project onto virtual camera
-                                    denom = z_s + xi
-                                    x_m = x_s / denom
-                                    y_m = y_s / denom
-
-                                    r2 = x_m * x_m + y_m * y_m
-                                    r4 = r2 * r2
-                                    radial = 1 + k1 * r2 + k2 * r4
-                                    x_r = x_m * radial
-                                    y_r = y_m * radial
+                                    r2 = x * x + y * y
+                                    x_r = x * (1.0 + k1 * r2 + k2 * r2 * r2)
+                                    y_r = y * (1.0 + k1 * r2 + k2 * r2 * r2)
+                                    # z_r = norm * point_3d[:, 2] / np.abs(point_3d[:, 2])
 
                                     # Tangent distortion coefficients
                                     if support_external_parameters:
