@@ -240,7 +240,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
             # camera_model = camera_distortion.get('model', 'Regular')
-            camera_model = "MEI"
+            camera_model = 'Kannala'
 
             ################
             # Undistortion #
@@ -292,8 +292,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_r = y * radial
 
                                     # Tangent distortion coefficients
-                                    x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                                    y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
 
                                     map_x[j, i] = fx * x_d + cx
                                     map_y[j, i] = fy * y_d + cy
@@ -324,8 +324,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_r = y * radial
 
                                     # Tangent distortion coefficients
-                                    x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                                    y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
 
                                     map_x[j, i] = fx * x_d + cx
                                     map_y[j, i] = fy * y_d + cy
@@ -388,8 +388,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     # Tangent distortion coefficients
                                     if support_external_parameters:
                                         r2 = x_r * x_r + y_r * y_r
-                                        x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
-                                        y_d = y_r + (p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r)
+                                        x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                        y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
                                     else:
                                         x_d = x_r
                                         y_d = y_r
@@ -423,8 +423,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                                     # Tangent distortion coefficients
                                     if support_external_parameters:
-                                        x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r * x_r))
-                                        y_d = y_r + (p1 * (r2 + 2 * y_r * y_r) + 2 * p2 * x_r * y_r)
+                                        x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                        y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
                                     else:
                                         x_d = x_r
                                         y_d = y_r
@@ -545,8 +545,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_r = y * radial
 
                                 # Tangent distortion coefficients
-                                x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                                y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
 
                             elif camera_model == "Brown":
                                 z = z if z != 0 else 1e-8  # Avoid division by zero
@@ -573,8 +573,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_r = y * radial
 
                                 # Tangent distortion coefficients
-                                x_d = x_r + (2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x))
-                                y_d = y_r + (p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y)
+                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
 
                             elif camera_model == "Fisheye":
                                 # Radial distortion coefficients
@@ -619,8 +619,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 # Tangent distortion coefficients
                                 if support_external_parameters:
                                     r2 = x_r * x_r + y_r * y_r
-                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r ** 2))
-                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r ** 2) + 2.0 * p2 * x_r * y_r)
+                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
                                 else:
                                     x_d = x_r
                                     y_d = y_r
@@ -638,14 +638,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y /= z + xi
 
                                 r2 = x * x + y * y
-                                x_r = x * (1 + k1 * r2 + k2 * r2 * r2)
-                                y_r = y * (1 + k1 * r2 + k2 * r2 * r2)
+                                x_r = x * (1.0 + k1 * r2 + k2 * r2 * r2)
+                                y_r = y * (1.0 + k1 * r2 + k2 * r2 * r2)
                                 # z_r = norm * point_3d[:, 2] / np.abs(point_3d[:, 2])
 
                                 # Tangent distortion coefficients
                                 if support_external_parameters:
-                                    x_d = x_r + (2 * p1 * x_r * y_r + p2 * (r2 + 2 * x_r * x_r))
-                                    y_d = y_r + (p1 * (r2 + 2 * y_r * y_r) + 2 * p2 * x_r * y_r)
+                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
+                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
                                 else:
                                     x_d = x_r
                                     y_d = y_r
@@ -880,7 +880,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # TODO: Debug
             if frame_num != 0:
-                exit()
+                continue
 
             #################
             # Handle Images #
@@ -899,7 +899,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '684f1f3f7badcb1e6a2756a8'
+    item_id = '68415b9d1bd0d57f611190a1'
     frames_item = dl.items.get(item_id=item_id)
     flags = dict(
         full_annotations_only=False,
