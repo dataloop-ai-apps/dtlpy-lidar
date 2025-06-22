@@ -229,8 +229,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             p1 = camera_distortion.get("p1", 0.0) * factor_m
             p2 = camera_distortion.get("p2", 0.0) * factor_m
             xi = camera_distortion.get('xi', 0.0) * factor_m
-            # r0 = camera_distortion.get('r0', 1.0)
-            r0 = 1.0
+            r0 = camera_distortion.get('r0', 0.0)
 
             # Regular (OpenCV Regular camera) #
             # Brown–Conrady #
@@ -240,7 +239,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
             # camera_model = camera_distortion.get('model', 'Regular')
-            camera_model = 'Kannala'
+            camera_model = 'Custom'
 
             ################
             # Undistortion #
@@ -278,10 +277,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y = (j - cy) / fy
 
                                     # Radial distortion coefficients
-                                    if support_external_parameters:
-                                        r = math.sqrt(x * x + y * y) / r0
-                                    else:
-                                        r = math.sqrt(x * x + y * y)
+                                    r = math.sqrt(x * x + y * y)
 
                                     r2 = r * r  # if k1 != 0.0 else 0
                                     r4 = r2 * r2  # if k2 != 0.0 else 0
@@ -305,10 +301,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y = (j - cy) / fy
 
                                     # Radial distortion coefficients
-                                    if support_external_parameters:
-                                        r = math.sqrt(x * x + y * y) / r0
-                                    else:
-                                        r = math.sqrt(x * x + y * y)
+                                    r = math.sqrt(x * x + y * y)
 
                                     r2 = r * r  # if k1 != 0.0 else 0
                                     r4 = r2 * r2  # if k2 != 0.0 else 0
@@ -338,10 +331,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y = (j - cy) / fy
 
                                     # Radial distortion coefficients
-                                    if support_external_parameters:
-                                        r = math.sqrt(x * x + y * y) / r0
-                                    else:
-                                        r = math.sqrt(x * x + y * y)
+                                    r = math.sqrt(x * x + y * y)
                                     theta = np.arctan(r)
 
                                     theta2 = theta * theta  # if k1 != 0.0 else 0
@@ -365,10 +355,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y = (j - cy) / fy
 
                                     # Radial distortion coefficients
-                                    if support_external_parameters:
-                                        r = math.sqrt(x * x + y * y) / r0
-                                    else:
-                                        r = math.sqrt(x * x + y * y)
+                                    r = math.sqrt(x * x + y * y)
                                     theta = np.arctan(r)
 
                                     theta2 = theta * theta
@@ -529,10 +516,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y = y / z
 
                                 # Radial distortion coefficients
-                                if support_external_parameters:
-                                    r = math.sqrt(x * x + y * y) / r0
-                                else:
-                                    r = math.sqrt(x * x + y * y)
+                                r = math.sqrt(x * x + y * y)
 
                                 r2 = r * r # if k1 != 0.0 else 0
                                 r4 = r2 * r2 # if k2 != 0.0 else 0
@@ -552,10 +536,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y = y / z
 
                                 # Radial distortion coefficients
-                                if support_external_parameters:
-                                    r = math.sqrt(x * x + y * y) / r0
-                                else:
-                                    r = math.sqrt(x * x + y * y)
+                                r = math.sqrt(x * x + y * y)
 
                                 r2 = r * r  # if k1 != 0.0 else 0
                                 r4 = r2 * r2  # if k2 != 0.0 else 0
@@ -576,10 +557,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                             elif camera_model == "Fisheye":
                                 # Radial distortion coefficients
-                                if support_external_parameters:
-                                    r = math.sqrt(x * x + y * y) / r0
-                                else:
-                                    r = math.sqrt(x * x + y * y)
+                                r = math.sqrt(x * x + y * y)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                                 theta2 = theta * theta  # if k1 != 0.0 else 0
@@ -594,10 +572,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                             elif camera_model == "Kannala":
                                 # Radial distortion coefficients
-                                if support_external_parameters:
-                                    r = math.sqrt(x * x + y * y) / r0
-                                else:
-                                    r = math.sqrt(x * x + y * y)
+                                r = math.sqrt(x * x + y * y)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                                 theta2 = theta * theta
@@ -647,6 +622,39 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 else:
                                     x_d = x_r
                                     y_d = y_r
+
+                            elif camera_model == "Custom":
+                                # Norms
+                                n2 = x * x + y * y
+                                r2 = n2 + z * z
+                                invR = 1.0 / np.sqrt(r2) if r2 != 0.0 else 0.0
+                                invN = 1.0 / np.sqrt(n2) if n2 != 0.0 else 0.0
+
+                                # Angular projection
+                                theta = np.arccos(z * invR)
+                                xu = theta * x * invN
+                                yu = theta * y * invN
+                                ru2 = xu * xu + yu * yu
+                                ru = np.sqrt(ru2)
+                                ru0 = ru - r0
+                                ru02 = ru0 * ru0
+
+                                # Radial distortion
+                                fD = 1.0
+                                for i, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
+                                    if ki != 0.0:
+                                        fD += ki * ru02 ** (i + 1)
+
+                                xd = xu * fD
+                                yd = yu * fD
+
+                                # Tangential distortion
+                                ydT = (yd + 2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * yu * yu))
+                                xdT = (xd + 2.0 * p2 * xu * yu + p1 * (ru2 + 2.0 * xu * xu))
+
+                                # Map to pixel coordinates
+                                x_d = xdT
+                                y_d = ydT
 
                             else:
                                 raise ValueError(
