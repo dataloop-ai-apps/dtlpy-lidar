@@ -11,19 +11,8 @@ from scipy.ndimage import map_coordinates
 
 
 class AnnotationProjection(dl.BaseServiceRunner):
-    # TODO: Remove from init later
-    def __init__(self, dataset: dl.Dataset = None):
-        def hex_to_bgr(hex_color: str):
-            hex_color = hex_color.lstrip('#')
-            r = int(hex_color[0:2], 16)
-            g = int(hex_color[2:4], 16)
-            b = int(hex_color[4:6], 16)
-            return b, g, r  # OpenCV uses BGR
-
-        self.labels_colors = {}
-        if dataset is not None:
-            for label_name, label_data in dataset.labels_flat_dict.items():
-                self.labels_colors[label_name] = hex_to_bgr(label_data.color)
+    def __init__(self):
+        ...
 
     @staticmethod
     def sort_face(points_4):
@@ -48,6 +37,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
     def create_annotation(self, option, label, annotation_pixels, depths, width, height, full_annotations_only):
         """
         Create annotation from 3D cube 8 points projected on 2D image.
+        :param option: annotation type, can be "Cube", "Polygons", or "Points".
         :param label: annotation label
         :param annotation_pixels: annotation 3D cube 8 points projected on 2D image.
         :param width: image width
@@ -140,10 +130,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
             raise ValueError(f"Unsupported option: {option}. Supported options are 'Cube', 'Polygons', and 'Points'.")
 
     # TODO: remove factor_m at the end
-    def handle_frame(self, cameras_map, frame_images, frame_annotations, flags):
+    def handle_frame(self, labels_colors, cameras_map, frame_images, frame_annotations, flags):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
+        :param labels_colors: map of label names to colors
         :param cameras_map: map of camera IDs to camera calibrations
         :param frame_images: images that correspond with the current frame number
         :param frame_annotations: annotations that correspond with the current frame number
@@ -227,15 +218,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
             ])
 
             camera_distortion = intrinsic_data.get('distortion', dict())
-            # factor_m = camera_distortion.get('m', 1.0)
             k1 = camera_distortion.get("k1", 0.0) * factor_m
             k2 = camera_distortion.get("k2", 0.0) * factor_m
             k3 = camera_distortion.get("k3", 0.0) * factor_m
-            k4 = camera_distortion.get("k4", 0.0) * factor_m  # Optional, if not present, set to 0
-            k5 = camera_distortion.get("k5", 0.0) * factor_m  # Optional, if not present, set to 0
-            k6 = camera_distortion.get("k6", 0.0) * factor_m  # Optional, if not present, set to 0
-            k7 = camera_distortion.get("k7", 0.0) * factor_m  # Optional, if not present, set to 0
-            k8 = camera_distortion.get("k8", 0.0) * factor_m  # Optional, if not present, set to 0
+            k4 = camera_distortion.get("k4", 0.0) * factor_m
+            k5 = camera_distortion.get("k5", 0.0) * factor_m
+            k6 = camera_distortion.get("k6", 0.0) * factor_m
+            k7 = camera_distortion.get("k7", 0.0) * factor_m
+            k8 = camera_distortion.get("k8", 0.0) * factor_m
             p1 = camera_distortion.get("p1", 0.0) * factor_m
             p2 = camera_distortion.get("p2", 0.0) * factor_m
             xi = camera_distortion.get('xi', 0.0) * factor_m
@@ -274,38 +264,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                 # Remove distortion from image
                 if apply_image_undistortion:
-                    camera_id = image_calibrations.get('camera_id')
-                    camera_calibrations = cameras_map.get(camera_id)
-                    sensors_data = camera_calibrations.get('sensorsData')
-
-                    # calculate projection matrix (Default values: Orthographic projection)
-                    intrinsic_data = sensors_data.get('intrinsicData', dict())
-                    fx = intrinsic_data.get('fx', 1.0)
-                    fy = intrinsic_data.get('fy', 1.0)
-                    s = intrinsic_data.get('skew', 0.0)
-                    cx = intrinsic_data.get('cx', 0.0)
-                    cy = intrinsic_data.get('cy', 0.0)
-                    K = np.array([
-                        [fx, s, cx],
-                        [0, fy, cy],
-                        [0, 0, 1]
-                    ])
-
-                    camera_distortion = intrinsic_data.get('distortion', dict())
-                    k1 = camera_distortion.get("k1", 0.0)
-                    k2 = camera_distortion.get("k2", 0.0)
-                    k3 = camera_distortion.get("k3", 0.0)
-                    k4 = camera_distortion.get("k4", 0.0)  # Optional, if not present, set to 0
-                    k5 = camera_distortion.get("k5", 0.0)  # Optional, if not present, set to 0
-                    k6 = camera_distortion.get("k6", 0.0)  # Optional, if not present, set to 0
-                    k7 = camera_distortion.get("k7", 0.0)  # Optional, if not present, set to 0
-                    k8 = camera_distortion.get("k8", 0.0)  # Optional, if not present, set to 0
-                    p1 = camera_distortion.get("p1", 0.0)
-                    p2 = camera_distortion.get("p2", 0.0)
-                    xi = camera_distortion.get('xi', 1.0)
-                    # factor_m = camera_distortion.get('m', 1.0)
-
-                    # OpenCV distortion coefficients
+                    # Manual Undistortion
                     if undistort_mode == "Manual":
                         h, w = item.height, item.width
                         map_x = np.zeros((h, w), dtype=np.float32)
@@ -492,6 +451,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             [undistorted_r, undistorted_g, undistorted_b], axis=2).astype(np.uint8)
                         cv2.imwrite(output_image_path, undistorted)
 
+                    # OpenCV Undistortion
                     elif undistort_mode == "OpenCV":
                         # Distortion coefficients
                         D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
@@ -526,6 +486,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     "path": image_path,
                     "output_path": output_image_path
                 }
+
             else:
                 raise ValueError("project_remotely must be either True or False.")
 
@@ -805,7 +766,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     for start_idx, end_idx in edges:
                         pt1 = tuple(np.round(anno_points_2d[start_idx]).astype(int))
                         pt2 = tuple(np.round(anno_points_2d[end_idx]).astype(int))
-                        color = self.labels_colors.get(annotation_data["label"], (255, 255, 255))  # Default color is white if label not found
+                        color = labels_colors.get(annotation_data["label"], (255, 255, 255))  # Default color is white if label not found
                         cv2.line(image, pt1, pt2, color=color, thickness=2)
                     cv2.imwrite(image_path, image)
 
@@ -878,8 +839,22 @@ class AnnotationProjection(dl.BaseServiceRunner):
         - apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
         :return: None
         """
+        # Get labels colors
+        def hex_to_bgr(hex_color: str):
+            hex_color = hex_color.lstrip('#')
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return b, g, r  # OpenCV uses BGR
+
+        labels_colors = {}
+        dataset = item.dataset
+        for label_name, label_data in dataset.labels_flat_dict.items():
+            labels_colors[label_name] = hex_to_bgr(label_data.color)
+
         # Download lidar scene video's json
-        items_path = os.path.join(os.getcwd(), item.id)
+        # items_path = os.path.join(os.getcwd(), "data", uid)
+        items_path = os.path.join(os.getcwd(), "data", item.id)
         frames_item_path = item.download(local_path=items_path, overwrite=True)
         with open(frames_item_path, 'r') as f:
             lidar_video_content = json.load(f)
@@ -913,6 +888,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
             frame_annotations = frame_annotations_per_frame.get(frame_num, list())
             self.handle_frame(
+                labels_colors=labels_colors,
                 cameras_map=cameras_map,
                 frame_images=frame_images,
                 frame_annotations=frame_annotations,
@@ -928,10 +904,12 @@ if __name__ == "__main__":
     flags = dict(
         full_annotations_only=False,
         project_remotely=False,
-        support_external_parameters=True
+        support_external_parameters=True,
+        apply_image_undistortion=False,
+        apply_annotation_distortion=True
     )
 
-    runner = AnnotationProjection(dataset=frames_item.dataset)
+    runner = AnnotationProjection()
     runner.project_annotations_to_2d(
         item=frames_item,
         flags=flags
