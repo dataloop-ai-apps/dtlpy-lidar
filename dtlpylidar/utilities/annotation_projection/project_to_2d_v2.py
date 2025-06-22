@@ -34,11 +34,52 @@ class AnnotationProjection(dl.BaseServiceRunner):
             "bl": tuple(bl)
         }
 
-    def create_annotation(self, option, label, annotation_pixels, depths, width, height, full_annotations_only):
+    @staticmethod
+    def get_front_and_back_faces(points_3d, annotation_pixels):
+        """
+        Determine front and back faces using the projection distance to the camera plane.
+        """
+        # Face definitions based on your corner layout (8 corners)
+        face_indices = {
+            "front": [4, 5, 7, 6],  # +Z
+            "back": [0, 1, 3, 2],  # -Z
+            "left": [0, 2, 6, 4],
+            "right": [1, 3, 7, 5],
+            "top": [2, 3, 7, 6],
+            "bottom": [0, 1, 5, 4]
+        }
+
+        camera_forward = np.array([0, 0, 1])  # Z-axis in camera space
+
+        # Score each face by how close it is to the image plane (dot with Z axis)
+        face_scores = {
+            name: np.mean(points_3d[indices] @ camera_forward)
+            for name, indices in face_indices.items()
+        }
+
+        # Closest = front, farthest = back
+        sorted_faces = sorted(face_scores.items(), key=lambda x: x[1])
+        front_face_name = sorted_faces[0][0]
+        back_face_name = sorted_faces[-1][0]
+
+        front_indices = face_indices[front_face_name]
+        back_indices = face_indices[back_face_name]
+
+        front_points_2d = annotation_pixels[front_indices]
+        back_points_2d = annotation_pixels[back_indices]
+
+        # Sort points top-left, top-right, bottom-right, bottom-left
+        front = AnnotationProjection.sort_face(front_points_2d)
+        back = AnnotationProjection.sort_face(back_points_2d)
+
+        return front, back
+
+    def create_annotation(self, option, label, points_3d, annotation_pixels, width, height, full_annotations_only):
         """
         Create annotation from 3D cube 8 points projected on 2D image.
         :param option: annotation type, can be "Cube", "Polygons", or "Points".
         :param label: annotation label
+        :param points_3d: 3D cube points in camera space (PCD normalized).
         :param annotation_pixels: annotation 3D cube 8 points projected on 2D image.
         :param width: image width
         :param height: image height
@@ -59,14 +100,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
         if not (counter >= min_threshold):
             return None
 
-        front_indices = np.argsort(depths)[:4]
-        back_indices = np.argsort(depths)[4:]
-
-        front_points = annotation_pixels[front_indices]
-        back_points = annotation_pixels[back_indices]
-
-        front = self.sort_face(front_points)
-        back = self.sort_face(back_points)
+        # Use camera-plane projection distance to get correct faces
+        front, back = self.get_front_and_back_faces(points_3d=points_3d, annotation_pixels=annotation_pixels)
 
         # Assign
         front_tl = front["tl"]
@@ -723,7 +758,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     # points_2d: (N, 1, 2) - OpenCV format
                     annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
 
-
                 # Select annotation option based on the projection mode
                 if project_remotely:
                     if apply_annotation_distortion:
@@ -733,15 +767,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 else:
                     option = "Points"
 
-                # Find Front and Back points (Front = points with smaller Z - closer to camera)
-                depths = points_3d[:, 2]  # Camera-space Z
-
                 # create annotation if it is inside the image boundaries
                 annotation_definitions = self.create_annotation(
                     option=option,
                     label=annotation_data["label"],
+                    points_3d=points_3d,
                     annotation_pixels=annotation_pixels,
-                    depths=depths,
                     width=item.width,
                     height=item.height,
                     full_annotations_only=full_annotations_only
