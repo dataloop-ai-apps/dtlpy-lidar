@@ -238,7 +238,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             k8 = camera_distortion.get("k8", 0.0) * factor_m  # Optional, if not present, set to 0
             p1 = camera_distortion.get("p1", 0.0) * factor_m
             p2 = camera_distortion.get("p2", 0.0) * factor_m
-            xi = camera_distortion.get('xi', 1.0) * factor_m
+            xi = camera_distortion.get('xi', 0.0) * factor_m
             # r0 = camera_distortion.get('r0', 1.0)
             r0 = 1.0
 
