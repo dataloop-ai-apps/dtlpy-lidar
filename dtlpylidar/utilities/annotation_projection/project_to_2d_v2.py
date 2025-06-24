@@ -1048,8 +1048,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 if __name__ == "__main__":
     # frames json item ID
-    dl.setenv('rc')
-    item_id = '685822032da29c6039f80472'
+    item_id = 'item_id'
     frames_item = dl.items.get(item_id=item_id)
     flags = dict(
         full_annotations_only=False,
