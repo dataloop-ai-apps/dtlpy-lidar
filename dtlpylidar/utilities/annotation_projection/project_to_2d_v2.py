@@ -972,10 +972,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         for frame_num in range(frames_count):
             print("Frame number:", frame_num)
 
-            # TODO: Debug
-            if frame_num != 0:
-                continue
-
             #################
             # Handle Images #
             #################
