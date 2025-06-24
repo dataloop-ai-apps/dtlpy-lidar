@@ -166,7 +166,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         else:
             raise ValueError(f"Unsupported option: {option}. Supported options are 'Cube', 'Polygons', and 'Points'.")
 
-    # TODO: remove factor_m at the end
     def handle_frame(self, labels_colors, cameras_map, frame_images, frame_annotations, flags):
         """
         Calculate frame annotations.
@@ -176,11 +175,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param frame_images: images that correspond with the current frame number
         :param frame_annotations: annotations that correspond with the current frame number
         :param flags: flags for the projection
-        - apply_image_undistortion: if True, apply image undistortion to the images before projection
-        - apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
-        - full_annotations_only: if True, only full annotations will be projected to 2D
-        - project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
-        - support_external_parameters: if True, support external parameters for the projection (k4, k5, k6, k7, k8)
         :return: None
         """
         # Parse flags
@@ -190,12 +184,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
         apply_image_undistortion = flags.get("apply_image_undistortion", False)
         apply_annotation_distortion = flags.get("apply_annotation_distortion", True)
 
-        # Debug flags: "Manual" or "OpenCV"
+        # Debug flags:
+        # "Manual"
+        # "OpenCV" (Debug)
         undistort_mode = "Manual"
         projection_mode = "Manual"
-
-        # factor_m = -150.0
-        factor_m = 1
 
         # iterate over images that correspond with frame
         images_map = {}
@@ -255,28 +248,30 @@ class AnnotationProjection(dl.BaseServiceRunner):
             ])
 
             camera_distortion = intrinsic_data.get('distortion', dict())
-            k1 = camera_distortion.get("k1", 0.0) * factor_m
-            k2 = camera_distortion.get("k2", 0.0) * factor_m
-            k3 = camera_distortion.get("k3", 0.0) * factor_m
-            k4 = camera_distortion.get("k4", 0.0) * factor_m
-            k5 = camera_distortion.get("k5", 0.0) * factor_m
-            k6 = camera_distortion.get("k6", 0.0) * factor_m
-            k7 = camera_distortion.get("k7", 0.0) * factor_m
-            k8 = camera_distortion.get("k8", 0.0) * factor_m
-            p1 = camera_distortion.get("p1", 0.0) * factor_m
-            p2 = camera_distortion.get("p2", 0.0) * factor_m
-            xi = camera_distortion.get('xi', 0.0) * factor_m
+            k1 = camera_distortion.get("k1", 0.0)
+            k2 = camera_distortion.get("k2", 0.0)
+            k3 = camera_distortion.get("k3", 0.0)
+            k4 = camera_distortion.get("k4", 0.0)
+            k5 = camera_distortion.get("k5", 0.0)
+            k6 = camera_distortion.get("k6", 0.0)
+            k7 = camera_distortion.get("k7", 0.0)
+            k8 = camera_distortion.get("k8", 0.0)
+            p1 = camera_distortion.get("p1", 0.0)
+            p2 = camera_distortion.get("p2", 0.0)
+            xi = camera_distortion.get('xi', 0.0)
             r0 = camera_distortion.get('r0', 0.0)
 
-            # Regular (OpenCV Regular camera) #
-            # Brown–Conrady #
-            # Fisheye (OpenCV Fisheye camera) #
-            # Kannala-Brandt #
-            # MEI #
-
-            # "Regular" or "Brown" or "Fisheye" or "Kannala" or "MEI"
-            # camera_model = camera_distortion.get('model', 'Regular')
-            camera_model = 'Custom'
+            # Camera Options:
+            camera_model_options = [
+                "Regular", # Regular (OpenCV Regular camera)
+                "Brown",   # Brown–Conrady
+                "Fisheye", # Fisheye (OpenCV Fisheye camera)
+                "Kannala", # Kannala-Brandt
+                "MEI",     # MEI (KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
+                "Custom",  # Custom
+            ]
+            camera_model = camera_distortion.get('model', 'Regular')
+            # camera_model = 'Custom'
 
             ################
             # Undistortion #
@@ -309,16 +304,16 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         if camera_model == "Regular":
                             for j in range(h):
                                 for i in range(w):
-                                    # Normalized coordinates
-                                    x = (i - cx) / fx
+                                    # Normalize
                                     y = (j - cy) / fy
+                                    x = (i - cx - skew * y) / fx
 
                                     # Radial distortion coefficients
                                     r = math.sqrt(x * x + y * y)
 
-                                    r2 = r * r  # if k1 != 0.0 else 0
-                                    r4 = r2 * r2  # if k2 != 0.0 else 0
-                                    r6 = r4 * r2  # if k3 != 0.0 else 0
+                                    r2 = r * r
+                                    r4 = r2 * r2
+                                    r6 = r4 * r2
 
                                     radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
                                     x_r = x * radial
@@ -334,20 +329,21 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         elif camera_model == "Brown":
                             for j in range(h):
                                 for i in range(w):
-                                    x = (i - cx) / fx
+                                    # Normalize
                                     y = (j - cy) / fy
+                                    x = (i - cx - skew * y) / fx
 
                                     # Radial distortion coefficients
                                     r = math.sqrt(x * x + y * y)
 
-                                    r2 = r * r  # if k1 != 0.0 else 0
-                                    r4 = r2 * r2  # if k2 != 0.0 else 0
-                                    r6 = r4 * r2  # if k3 != 0.0 else 0
-                                    r8 = r6 * r2  # if k4 != 0.0 else 0
-                                    r10 = r8 * r2  # if k5 != 0.0 else 0
-                                    r12 = r10 * r2  # if k6 != 0.0 else 0
-                                    r14 = r12 * r2  # if k7 != 0.0 else 0
-                                    r16 = r14 * r2  # if k8 != 0.0 else 0
+                                    r2 = r * r
+                                    r4 = r2 * r2
+                                    r6 = r4 * r2
+                                    r8 = r6 * r2
+                                    r10 = r8 * r2
+                                    r12 = r10 * r2
+                                    r14 = r12 * r2
+                                    r16 = r14 * r2
 
                                     radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
                                     x_r = x * radial
@@ -363,18 +359,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         elif camera_model == "Fisheye":
                             for j in range(h):
                                 for i in range(w):
-                                    # Normalized coordinates
-                                    x = (i - cx) / fx
+                                    # Normalize
                                     y = (j - cy) / fy
+                                    x = (i - cx - skew * y) / fx
 
                                     # Radial distortion coefficients
                                     r = math.sqrt(x * x + y * y)
                                     theta = np.arctan(r)
 
-                                    theta2 = theta * theta  # if k1 != 0.0 else 0
-                                    theta4 = theta2 * theta2  # if k2 != 0.0 else 0
-                                    theta6 = theta4 * theta2  # if k3 != 0.0 else 0
-                                    theta8 = theta6 * theta2  # if k4 != 0.0 else 0
+                                    theta2 = theta * theta
+                                    theta4 = theta2 * theta2
+                                    theta6 = theta4 * theta2
+                                    theta8 = theta6 * theta2
 
                                     radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
                                     scale = radial / r if r > 1e-8 else 1.0
@@ -387,9 +383,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         elif camera_model == "Kannala":
                             for j in range(h):
                                 for i in range(w):
-                                    # Normalized coordinates
-                                    x = (i - cx) / fx
+                                    # Normalize
                                     y = (j - cy) / fy
+                                    x = (i - cx - skew * y) / fx
 
                                     # Radial distortion coefficients
                                     r = math.sqrt(x * x + y * y)
@@ -424,10 +420,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         elif camera_model == "MEI":
                             for j in range(h):
                                 for i in range(w):
-                                    # Normalized pixel coordinates
-                                    x = (i - cx) / fx
-                                    y = (j - cy) / fy
+                                    # Normalize
                                     z = 1.0
+                                    y = (j - cy) / fy
+                                    x = (i - cx - skew * y) / fx
 
                                     norm = float(np.linalg.norm(np.array([x, y, z])))
                                     x = x / norm
@@ -439,8 +435,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y /= z + xi
 
                                     r2 = x * x + y * y
-                                    x_r = x * (1.0 + k1 * r2 + k2 * r2 * r2)
-                                    y_r = y * (1.0 + k1 * r2 + k2 * r2 * r2)
+                                    radial = 1.0 + k1 * r2 + k2 * r2 * r2
+                                    x_r = x * radial
+                                    y_r = y * radial
                                     # z_r = norm * point_3d[:, 2] / np.abs(point_3d[:, 2])
 
                                     # Tangent distortion coefficients
@@ -455,10 +452,53 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     map_x[j, i] = fx * x_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
+                        elif camera_model == "Custom":
+                            for j in range(h):
+                                for i in range(w):
+                                    # Normalize
+                                    z = 1.0
+                                    y = (j - cy) / fy
+                                    x = (i - cx - skew * y) / fx
+
+                                    n2 = x * x + y * y
+                                    r2 = n2 + z * z
+                                    invR = 1.0 / np.sqrt(r2) if r2 != 0.0 else 0.0
+                                    invN = 1.0 / np.sqrt(n2) if n2 != 0.0 else 0.0
+
+                                    # Angular projection
+                                    theta = np.arccos(z * invR)
+                                    xu = theta * x * invN
+                                    yu = theta * y * invN
+                                    ru2 = xu * xu + yu * yu
+                                    ru = np.sqrt(ru2)
+                                    ru0 = ru - r0
+                                    ru02 = ru0 * ru0
+
+                                    # Radial distortion
+                                    fD = 1.0
+                                    for i, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
+                                        if ki != 0.0:
+                                            fD += ki * ru02 ** (i + 1)
+
+                                    xd = xu * fD
+                                    yd = yu * fD
+
+                                    # Tangential distortion
+                                    ydT = (yd + 2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * yu * yu))
+                                    xdT = (xd + 2.0 * p2 * xu * yu + p1 * (ru2 + 2.0 * xu * xu))
+
+                                    # Map to pixel coordinates
+                                    x_d = xdT
+                                    y_d = ydT
+
+                                    # Project back to image plane
+                                    map_x[j, i] = fx * x_d + cx
+                                    map_y[j, i] = fy * y_d + cy
+
                         else:
                             raise ValueError(
                                 f"Unsupported camera model: {camera_model}. "
-                                f"Supported models are 'Regular', 'Brown', 'Fisheye', 'Kannala', and 'MEI'."
+                                f"Supported models are: {camera_model_options}."
                             )
 
                         image = cv2.imread(image_path)
@@ -548,16 +588,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         (x, y, z) = point_3d
                         if apply_annotation_distortion:
                             if camera_model == "Regular":
-                                z = z if z != 0 else 1e-8  # Avoid division by zero
+                                # Normalize
+                                z = z if z != 0 else 1e-8
                                 x = x / z
                                 y = y / z
 
                                 # Radial distortion coefficients
                                 r = math.sqrt(x * x + y * y)
 
-                                r2 = r * r # if k1 != 0.0 else 0
-                                r4 = r2 * r2 # if k2 != 0.0 else 0
-                                r6 = r4 * r2 # if k3 != 0.0 else 0
+                                r2 = r * r
+                                r4 = r2 * r2
+                                r6 = r4 * r2
 
                                 radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
                                 x_r = x * radial
@@ -568,21 +609,22 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
 
                             elif camera_model == "Brown":
-                                z = z if z != 0 else 1e-8  # Avoid division by zero
+                                # Normalize
+                                z = z if z != 0 else 1e-8
                                 x = x / z
                                 y = y / z
 
                                 # Radial distortion coefficients
                                 r = math.sqrt(x * x + y * y)
 
-                                r2 = r * r  # if k1 != 0.0 else 0
-                                r4 = r2 * r2  # if k2 != 0.0 else 0
-                                r6 = r4 * r2  # if k3 != 0.0 else 0
-                                r8 = r6 * r2  # if k4 != 0.0 else 0
-                                r10 = r8 * r2  # if k5 != 0.0 else 0
-                                r12 = r10 * r2  # if k6 != 0.0 else 0
-                                r14 = r12 * r2  # if k7 != 0.0 else 0
-                                r16 = r14 * r2  # if k8 != 0.0 else 0
+                                r2 = r * r
+                                r4 = r2 * r2
+                                r6 = r4 * r2
+                                r8 = r6 * r2
+                                r10 = r8 * r2
+                                r12 = r10 * r2
+                                r14 = r12 * r2
+                                r16 = r14 * r2
 
                                 radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
                                 x_r = x * radial
@@ -597,10 +639,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 r = math.sqrt(x * x + y * y)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
-                                theta2 = theta * theta  # if k1 != 0.0 else 0
-                                theta4 = theta2 * theta2  # if k2 != 0.0 else 0
-                                theta6 = theta4 * theta2  # if k3 != 0.0 else 0
-                                theta8 = theta6 * theta2  # if k4 != 0.0 else 0
+                                theta2 = theta * theta
+                                theta4 = theta2 * theta2
+                                theta6 = theta4 * theta2
+                                theta8 = theta6 * theta2
 
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
                                 scale = radial / r if r > 1e-8 else 1.0
@@ -636,8 +678,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_d = y_r
 
                             elif camera_model == "MEI":
-                                # Based on the MEI model:
-                                # https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py
+                                # Normalize
                                 norm = float(np.linalg.norm(np.array([x, y, z])))
                                 x = x / norm
                                 y = y / norm
@@ -648,8 +689,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y /= z + xi
 
                                 r2 = x * x + y * y
-                                x_r = x * (1.0 + k1 * r2 + k2 * r2 * r2)
-                                y_r = y * (1.0 + k1 * r2 + k2 * r2 * r2)
+                                radial = 1.0 + k1 * r2 + k2 * r2 * r2
+                                x_r = x * radial
+                                y_r = y * radial
                                 # z_r = norm * point_3d[:, 2] / np.abs(point_3d[:, 2])
 
                                 # Tangent distortion coefficients
@@ -661,7 +703,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     y_d = y_r
 
                             elif camera_model == "Custom":
-                                # Norms
+                                # Normalize
                                 n2 = x * x + y * y
                                 r2 = n2 + z * z
                                 invR = 1.0 / np.sqrt(r2) if r2 != 0.0 else 0.0
@@ -696,7 +738,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             else:
                                 raise ValueError(
                                     f"Unsupported camera model: {camera_model}.\n"
-                                    f"Supported models are 'Regular', 'Brown', 'Fisheye', 'Kannala', 'MEI'."
+                                    f"Supported models are: {camera_model_options}"
                                 )
                         else:
                             # If no distortion, just use the projected pixel directly
