@@ -559,15 +559,23 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             )
 
                         image = cv2.imread(image_path)
-                        coords = [map_y.ravel(), map_x.ravel()]
-                        undistorted_r = map_coordinates(
-                            image[:, :, 0], coords, order=1, mode='reflect').reshape((h, w))
-                        undistorted_g = map_coordinates(
-                            image[:, :, 1], coords, order=1, mode='reflect').reshape((h, w))
-                        undistorted_b = map_coordinates(
-                            image[:, :, 2], coords, order=1, mode='reflect').reshape((h, w))
-                        undistorted = np.stack(
-                            [undistorted_r, undistorted_g, undistorted_b], axis=2).astype(np.uint8)
+
+                        # Option 1: Using map_coordinates (slower)
+                        # coords = [map_y.ravel(), map_x.ravel()]
+                        # undistorted_r = map_coordinates(
+                        #     image[:, :, 0], coords, order=1, mode='reflect').reshape((h, w))
+                        # undistorted_g = map_coordinates(
+                        #     image[:, :, 1], coords, order=1, mode='reflect').reshape((h, w))
+                        # undistorted_b = map_coordinates(
+                        #     image[:, :, 2], coords, order=1, mode='reflect').reshape((h, w))
+                        # undistorted = np.stack(
+                        #     [undistorted_r, undistorted_g, undistorted_b], axis=2).astype(np.uint8)
+
+                        # Option 2: Using remap (faster)
+                        undistorted = cv2.remap(image, map_x, map_y, interpolation=cv2.INTER_LINEAR,
+                                                borderMode=cv2.BORDER_REFLECT)
+
+                        # Save or display
                         cv2.imwrite(output_image_path, undistorted)
 
                     # OpenCV Undistortion
