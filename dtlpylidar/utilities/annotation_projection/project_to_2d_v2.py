@@ -324,7 +324,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
                                     y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
 
-                                    map_x[j, i] = fx * x_d + cx
+                                    map_x[j, i] = fx * x_d + skew * y_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
                         elif camera_model == "Brown":
@@ -354,7 +354,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
                                     y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
 
-                                    map_x[j, i] = fx * x_d + cx
+                                    map_x[j, i] = fx * x_d + skew * y_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
                         elif camera_model == "Fisheye":
@@ -378,7 +378,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     x_d = scale * x
                                     y_d = scale * y
 
-                                    map_x[j, i] = fx * x_d + cx
+                                    map_x[j, i] = fx * x_d + skew * y_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
                         elif camera_model == "Kannala":
@@ -415,7 +415,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                         x_d = x_r
                                         y_d = y_r
 
-                                    map_x[j, i] = fx * x_d + cx
+                                    map_x[j, i] = fx * x_d + skew * y_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
                         elif camera_model == "MEI":
@@ -450,7 +450,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                         y_d = y_r
 
                                     # Project back to image plane
-                                    map_x[j, i] = fx * x_d + cx
+                                    map_x[j, i] = fx * x_d + skew * y_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
                         elif camera_model == "Custom":
@@ -481,19 +481,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                         if ki != 0.0:
                                             fD += ki * ru02 ** (i + 1)
 
-                                    xd = xu * fD
-                                    yd = yu * fD
+                                    x_r = xu * fD
+                                    y_r = yu * fD
 
                                     # Tangential distortion
-                                    ydT = (yd + 2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * yu * yu))
-                                    xdT = (xd + 2.0 * p2 * xu * yu + p1 * (ru2 + 2.0 * xu * xu))
+                                    # x_d = x_r + (2.0 * p2 * xu * yu + p1 * (ru2 + 2.0 * xu * xu))
+                                    # y_d = y_r + (2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * yu * yu))
 
-                                    # Map to pixel coordinates
-                                    x_d = xdT
-                                    y_d = ydT
+                                    x_d = x_r + (2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * xu * xu))
+                                    y_d = y_r + (p1 * (ru2 + 2.0 * yu * yu) + 2.0 * p2 * xu * yu)
 
                                     # Project back to image plane
-                                    map_x[j, i] = fx * x_d + cx
+                                    map_x[j, i] = fx * x_d + skew * y_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
                         else:
@@ -725,16 +724,15 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     if ki != 0.0:
                                         fD += ki * ru02 ** (i + 1)
 
-                                xd = xu * fD
-                                yd = yu * fD
+                                x_r = xu * fD
+                                y_r = yu * fD
 
                                 # Tangential distortion
-                                ydT = (yd + 2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * yu * yu))
-                                xdT = (xd + 2.0 * p2 * xu * yu + p1 * (ru2 + 2.0 * xu * xu))
+                                # x_d = x_r + (2.0 * p2 * xu * yu + p1 * (ru2 + 2.0 * xu * xu))
+                                # y_d = y_r + (2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * yu * yu))
 
-                                # Map to pixel coordinates
-                                x_d = xdT
-                                y_d = ydT
+                                x_d = x_r + (2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * xu * xu))
+                                y_d = y_r + (p1 * (ru2 + 2.0 * yu * yu) + 2.0 * p2 * xu * yu)
 
                             else:
                                 raise ValueError(
