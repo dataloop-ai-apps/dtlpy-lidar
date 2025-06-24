@@ -12,66 +12,112 @@ from scipy.ndimage import map_coordinates
 
 class AnnotationProjection(dl.BaseServiceRunner):
     def __init__(self):
-        ...
-
-    @staticmethod
-    def sort_face(points_4):
-        # points_4: (4, 2) array
-        points_4 = np.array(points_4)
-        sorted_by_y = points_4[np.argsort(points_4[:, 1])]  # sort top to bottom
-
-        top_two = sorted_by_y[:2]
-        bottom_two = sorted_by_y[2:]
-
-        # now sort left/right within top and bottom
-        tl, tr = top_two[np.argsort(top_two[:, 0])]
-        bl, br = bottom_two[np.argsort(bottom_two[:, 0])]
-
-        return {
-            "tl": tuple(tl),
-            "tr": tuple(tr),
-            "br": tuple(br),
-            "bl": tuple(bl)
+        self.face_indices = {
+            "front": [4, 5, 7, 6],  # Z = +1
+            "back": [0, 1, 3, 2],   # Z = -1
+            "left": [0, 2, 6, 4],   # X = -1
+            "right": [1, 3, 7, 5],  # X = +1
+            "top": [2, 3, 7, 6],    # Y = +1
+            "bottom": [0, 1, 5, 4]  # Y = -1
+        }
+        self.opposite_faces = {
+            "front": "back",
+            "back": "front",
+            "left": "right",
+            "right": "left",
+            "top": "bottom",
+            "bottom": "top"
         }
 
     @staticmethod
-    def get_front_and_back_faces(points_3d, annotation_pixels):
+    def intersect_ray_with_face(ray_origin, ray_dir, face_points):
         """
-        Determine front and back faces using the projection distance to the camera plane.
+        Intersect a ray with a quad face.
+        Returns (distance, intersection_point) if inside face, else None.
         """
-        # Face definitions based on your corner layout (8 corners)
-        face_indices = {
-            "front": [4, 5, 7, 6],  # +Z
-            "back": [0, 1, 3, 2],  # -Z
-            "left": [0, 2, 6, 4],
-            "right": [1, 3, 7, 5],
-            "top": [2, 3, 7, 6],
-            "bottom": [0, 1, 5, 4]
+        p0, p1, p2, p3 = face_points
+        v1 = p1 - p0
+        v2 = p3 - p0
+        normal = np.cross(v1, v2)
+        normal = normal / (np.linalg.norm(normal) + 1e-8)
+
+        denom = np.dot(normal, ray_dir)
+        if abs(denom) < 1e-6:
+            return None  # ray is parallel to face
+
+        d = np.dot(normal, p0 - ray_origin) / denom
+        if d < 0:
+            return None  # intersection is behind the camera
+
+        intersection = ray_origin + d * ray_dir
+
+        # Point-in-quad test (inside both triangles)
+        def inside_triangle(pt, a, b, c):
+            v0 = c - a
+            v1 = b - a
+            v2 = pt - a
+            dot00 = np.dot(v0, v0)
+            dot01 = np.dot(v0, v1)
+            dot02 = np.dot(v0, v2)
+            dot11 = np.dot(v1, v1)
+            dot12 = np.dot(v1, v2)
+            inv_denom = 1.0 / (dot00 * dot11 - dot01 * dot01 + 1e-8)
+            u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+            v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+            return (u >= 0) and (v >= 0) and (u + v <= 1)
+
+        inside = (
+            inside_triangle(intersection, p0, p1, p2)
+            or inside_triangle(intersection, p0, p2, p3)
+        )
+        if inside:
+            return d, intersection
+        else:
+            return None
+
+    def get_front_face_by_intersection(self, points_3d):
+        camera_origin = np.array([0.0, 0.0, 0.0])
+        cube_center = np.mean(points_3d, axis=0)
+        ray_dir = cube_center - camera_origin
+        ray_dir /= np.linalg.norm(ray_dir)
+
+        closest_face = None
+        min_distance = float('inf')
+
+        for name, indices in self.face_indices.items():
+            face_pts = points_3d[indices]
+            result = self.intersect_ray_with_face(camera_origin, ray_dir, face_pts)
+            if result:
+                dist, _ = result
+                if dist < min_distance:
+                    min_distance = dist
+                    closest_face = name
+
+        return closest_face  # e.g. "front"
+
+    def get_front_and_back_faces_by_ray(self, points_3d, annotation_pixels):
+        # Find the front face by ray intersection
+        front_name = self.get_front_face_by_intersection(points_3d)
+        back_name = self.opposite_faces[front_name]
+
+        front_indices = self.face_indices[front_name]
+        back_indices = self.face_indices[back_name]
+
+        front_points = annotation_pixels[front_indices]
+        back_points = annotation_pixels[back_indices]
+
+        front = {
+            "tl": tuple(front_points[0]),
+            "tr": tuple(front_points[1]),
+            "br": tuple(front_points[2]),
+            "bl": tuple(front_points[3])
         }
-
-        camera_forward = np.array([0, 0, 1])  # Z-axis in camera space
-
-        # Score each face by how close it is to the image plane (dot with Z axis)
-        face_scores = {
-            name: np.mean(points_3d[indices] @ camera_forward)
-            for name, indices in face_indices.items()
+        back = {
+            "tl": tuple(back_points[0]),
+            "tr": tuple(back_points[1]),
+            "br": tuple(back_points[2]),
+            "bl": tuple(back_points[3])
         }
-
-        # Closest = front, farthest = back
-        sorted_faces = sorted(face_scores.items(), key=lambda x: x[1])
-        front_face_name = sorted_faces[0][0]
-        back_face_name = sorted_faces[-1][0]
-
-        front_indices = face_indices[front_face_name]
-        back_indices = face_indices[back_face_name]
-
-        front_points_2d = annotation_pixels[front_indices]
-        back_points_2d = annotation_pixels[back_indices]
-
-        # Sort points top-left, top-right, bottom-right, bottom-left
-        front = AnnotationProjection.sort_face(front_points_2d)
-        back = AnnotationProjection.sort_face(back_points_2d)
-
         return front, back
 
     def create_annotation(self, option, label, points_3d, annotation_pixels, width, height, full_annotations_only):
@@ -84,7 +130,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param width: image width
         :param height: image height
         :param full_annotations_only: if True, only full annotations will be projected to 2D
-        :return: cube annotation if at least 2 points are inside the image boundaries.
+        :return: cube 3D annotation representation if at least 2 points are inside the image boundaries.
         """
         # check if at least 2 points are inside the image boundaries
         counter = 0
@@ -101,7 +147,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             return None
 
         # Use camera-plane projection distance to get correct faces
-        front, back = self.get_front_and_back_faces(points_3d=points_3d, annotation_pixels=annotation_pixels)
+        front, back = self.get_front_and_back_faces_by_ray(points_3d=points_3d, annotation_pixels=annotation_pixels)
 
         # Assign
         front_tl = front["tl"]
@@ -115,7 +161,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         back_bl = back["bl"]
 
         if option == "Cube":
-            # create cube annotation
             cube = dl.Cube(
                 label=label,
                 front_tl=front_tl,
@@ -130,7 +175,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
             return [cube]
 
         elif option == "Polygons":
-            # create polygons annotation
             polygon1 = dl.Polygon(
                 geo=[
                     [front_tl[0], front_tl[1]],  # front top left
@@ -150,8 +194,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 label=label
             )
             return [polygon1, polygon2]
+
         elif option == "Points":
-            # create points annotation
             points = [
                 dl.Point(x=front_tl[0], y=front_tl[1], label=label),  # front top left
                 dl.Point(x=front_tr[0], y=front_tr[1], label=label),  # front top right
@@ -163,6 +207,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 dl.Point(x=back_bl[0], y=back_bl[1], label=label)     # back bottom left
             ]
             return points
+
         else:
             raise ValueError(f"Unsupported option: {option}. Supported options are 'Cube', 'Polygons', and 'Points'.")
 
@@ -870,6 +915,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
     @staticmethod
     def build_frame_annotations_per_frame_mapping(lidar_video_content, annotations):
+        """
+        Function that builds a mapping of frame annotations per frame number.
+        The function also handles the case of missing inner snapshots information.
+        :param lidar_video_content: DL lidar scene item content (json)
+        :param annotations: DL lidar scene item annotations
+        :return: mapping of frame annotations per frame number
+        """
         # Order annotations frames by frame number
         frames_count = len(lidar_video_content.get('frames', list()))
         annotation: dl.Annotation
