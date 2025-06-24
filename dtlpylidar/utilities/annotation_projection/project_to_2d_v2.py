@@ -172,28 +172,40 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 back_br=back_br,
                 back_bl=back_bl
             )
-            return [cube]
+            cubes = [cube]
+            return cubes
 
         elif option == "Polygons":
-            polygon1 = dl.Polygon(
-                geo=[
-                    [front_tl[0], front_tl[1]],  # front top left
-                    [front_tr[0], front_tr[1]],  # front top right
-                    [front_br[0], front_br[1]],  # front bottom right
-                    [front_bl[0], front_bl[1]],  # front bottom left
-                ],
+            # Option 1 - Front & Back Polygons
+            # polygon1 = dl.Polygon(
+            #     geo=[
+            #         [front_tl[0], front_tl[1]],  # front top left
+            #         [front_tr[0], front_tr[1]],  # front top right
+            #         [front_br[0], front_br[1]],  # front bottom right
+            #         [front_bl[0], front_bl[1]],  # front bottom left
+            #     ],
+            #     label=label
+            # )
+            # polygon2 = dl.Polygon(
+            #     geo=[
+            #         [back_tl[0], back_tl[1]],    # back top left
+            #         [back_tr[0], back_tr[1]],    # back top right
+            #         [back_br[0], back_br[1]],    # back bottom right
+            #         [back_bl[0], back_bl[1]]     # back bottom left
+            #     ],
+            #     label=label
+            # )
+            # polygons = [polygon1, polygon2]
+
+            # Option 2 - Convex Hull Polygon
+            pts = annotation_pixels.astype(dtype=np.float32)
+            hull = cv2.convexHull(pts)
+            polygon = dl.Polygon(
+                geo=hull.squeeze().tolist(),
                 label=label
             )
-            polygon2 = dl.Polygon(
-                geo=[
-                    [back_tl[0], back_tl[1]],    # back top left
-                    [back_tr[0], back_tr[1]],    # back top right
-                    [back_br[0], back_br[1]],    # back bottom right
-                    [back_bl[0], back_bl[1]]     # back bottom left
-                ],
-                label=label
-            )
-            return [polygon1, polygon2]
+            polygons = [polygon]
+            return polygons
 
         elif option == "Points":
             points = [
@@ -878,20 +890,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 else:
                     annotation_points_2d = []
                     for annotation_definition in annotation_definitions:
-                        if isinstance(annotation_definition, dl.Cube):
-                            annotation_definition_geo = [
-                                annotation_definition.front_tl,
-                                annotation_definition.front_tr,
-                                annotation_definition.front_br,
-                                annotation_definition.front_bl,
-                                annotation_definition.back_tl,
-                                annotation_definition.back_tr,
-                                annotation_definition.back_br,
-                                annotation_definition.back_bl
-                            ]
-                        else:
-                            annotation_definition_geo = annotation_definition.geo
-                        annotation_points_2d.append(annotation_definition_geo)
+                        # Append point geo to the annotation points list
+                        annotation_points_2d.append(annotation_definition.geo)
                     image_path = images_map.get(item_id, dict()).get("output_path")
                     image = cv2.imread(image_path)
 
