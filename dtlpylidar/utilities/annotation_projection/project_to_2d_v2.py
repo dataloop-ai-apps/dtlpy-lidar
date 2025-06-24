@@ -166,10 +166,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
         else:
             raise ValueError(f"Unsupported option: {option}. Supported options are 'Cube', 'Polygons', and 'Points'.")
 
-    def handle_frame(self, labels_colors, cameras_map, frame_images, frame_annotations, flags):
+    def handle_frame(self, items_path, labels_colors, cameras_map, frame_images, frame_annotations, flags):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
+        :param items_path: path to the items directory
         :param labels_colors: map of label names to colors
         :param cameras_map: map of camera IDs to camera calibrations
         :param frame_images: images that correspond with the current frame number
@@ -283,7 +284,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             elif project_remotely is False:
                 # Set image paths
-                image_path = str(os.path.join(frames_item.id, item.filename[1:]))
+                image_path = str(os.path.join(items_path, item.filename[1:]))
                 img_name, img_ext = os.path.splitext(image_path)
                 output_image_path = f"{img_name}_annotated{img_ext}"
                 images_map[item_id]["path"] = image_path
@@ -978,6 +979,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
             frame_annotations = frame_annotations_per_frame.get(frame_num, list())
             self.handle_frame(
+                items_path=items_path,
                 labels_colors=labels_colors,
                 cameras_map=cameras_map,
                 frame_images=frame_images,
