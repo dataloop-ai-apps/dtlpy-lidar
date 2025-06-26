@@ -326,10 +326,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 "Fisheye", # Fisheye (OpenCV Fisheye camera)
                 "Kannala", # Kannala-Brandt
                 "MEI",     # MEI (KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
-                "Custom",  # Custom
+                "Custom0",  # Custom0
             ]
             camera_model = camera_distortion.get('model', 'Regular')
-            # camera_model = 'Custom'
+            # camera_model = 'Custom0'
 
             ################
             # Undistortion #
@@ -510,7 +510,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     map_x[j, i] = fx * x_d + skew * y_d + cx
                                     map_y[j, i] = fy * y_d + cy
 
-                        elif camera_model == "Custom":
+                        elif camera_model == "Custom0":
                             for j in range(h):
                                 for i in range(w):
                                     # Normalize
@@ -767,7 +767,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     x_d = x_r
                                     y_d = y_r
 
-                            elif camera_model == "Custom":
+                            elif camera_model == "Custom0":
                                 # Normalize
                                 n2 = x * x + y * y
                                 r2 = n2 + z * z
