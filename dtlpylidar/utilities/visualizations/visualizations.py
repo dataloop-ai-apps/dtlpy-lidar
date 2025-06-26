@@ -60,10 +60,11 @@ def visualize_annotation_on_pcd(extrinsic: Extrinsic, annotation_translation, an
     """
     if item is None and local_path is None:
         raise Exception("Either item id or local file path must be provided")
-    cube = transformations.calc_cube_points(annotation_translation=annotation_translation,
-                                            annotation_rotation=annotation_rotation,
-                                            annotation_scale=annotation_scale,
-                                            apply_rotation=True)
+    cube = transformations.calc_cube_points(
+        annotation_translation=annotation_translation,
+        annotation_rotation=annotation_rotation,
+        annotation_scale=annotation_scale
+    )
 
     if local_path is None:
         local_path = item.download()
