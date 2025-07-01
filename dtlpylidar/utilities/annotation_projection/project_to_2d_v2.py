@@ -160,6 +160,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         back_br = back["br"]
         back_bl = back["bl"]
 
+        # TODO: Open ticket Feature Request - Bend Cuboid
         if option == "Cube":
             cube = dl.Cube(
                 label=label,
@@ -236,6 +237,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :return: None
         """
         # Parse flags
+        # TODO: Replace as reading from Context and add example
         full_annotations_only = flags.get("full_annotations_only", False)
         project_remotely = flags.get("project_remotely", False)
         support_external_parameters = flags.get("support_external_parameters", True)
@@ -245,6 +247,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # Debug flags:
         # "Manual"
         # "OpenCV" (Debug)
+        # TODO: Moving OpenCV usage to tests
         undistort_mode = "Manual"
         projection_mode = "Manual"
 
@@ -320,13 +323,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
             r0 = camera_distortion.get('r0', 0.0)
 
             # Camera Options:
+            # TODO: Put in ReadMe.md (change str to smaller case - add Enum)
             camera_model_options = [
                 "Regular", # Regular (OpenCV Regular camera)
                 "Brown",   # Brown–Conrady
                 "Fisheye", # Fisheye (OpenCV Fisheye camera)
                 "Kannala", # Kannala-Brandt
                 "MEI",     # MEI (KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
-                "Custom0",  # Custom0
+                "Custom0", # Custom0
             ]
             camera_model = camera_distortion.get('model', 'Regular')
             # camera_model = 'Custom0'
@@ -335,6 +339,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             # Undistortion #
             ################
 
+            # TODO: Replace name to Debug + make both functionality work togther.
             if project_remotely is True:
                 # No undistortion support for remote image
                 images_map[item_id]["path"] = None
