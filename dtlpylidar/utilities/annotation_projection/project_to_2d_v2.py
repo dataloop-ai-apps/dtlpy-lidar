@@ -716,7 +716,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             elif camera_model == "Fisheye":
                                 # Radial distortion coefficients
                                 r = math.sqrt(x * x + y * y)
-                                # r = math.sqrt(x * x + y * y + z * z)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                                 theta2 = theta * theta
@@ -776,11 +775,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                     # Compute the tangential distortion
                                     delta_t = (m1 * theta + m2 * theta3 + m3 * theta5) * angular
                                 else:
-                                    x_t = 0
-                                    y_t = 0
+                                    delta_t = 0
 
-                                x_d = x_r + x_t
-                                y_d = y_r + y_t
+                                x_d = x_r + delta_t
+                                y_d = y_r + delta_t
 
                             elif camera_model == "MEI":
                                 # Normalize
@@ -861,8 +859,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                 # OpenCV MVP
                 else:
-                    if support_external_parameters:
-                        raise ValueError("OpenCV projection mode does not support external parameters.")
+                    # if support_external_parameters:
+                    #     raise ValueError("OpenCV projection mode does not support external parameters.")
 
                     mv = view_matrix @ model_matrix  # Model View matrix
                     K = projection_matrix[:3, :3]  # Projection matrix
