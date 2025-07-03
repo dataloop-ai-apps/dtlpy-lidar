@@ -737,9 +737,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_d = y_r + y_t
 
                             elif camera_model == "Kannala":
+                                # TODO: In progress
+
                                 # Radial distortion coefficients
                                 r = math.sqrt(x * x + y * y)
-                                # r = math.sqrt(x * x + y * y + z * z)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                                 theta2 = theta * theta
@@ -758,9 +759,22 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                                 # Tangent distortion coefficients
                                 if support_external_parameters:
-                                    r2 = r * r
-                                    x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
-                                    y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
+                                    # TODO: Given Parameters
+                                    j1, j2, j3, j4 = 0, 0, 0, 0
+                                    m1, m2, m3 = 0, 0, 0
+
+                                    theta3 = theta2 * theta
+                                    theta5 = theta4 * theta
+
+                                    # Compute the azimuthal angle phi
+                                    phi = math.atan2(y, x)
+
+                                    # Compute the angular function
+                                    angular = (j1 * math.cos(phi) + j2 * math.sin(phi) +
+                                               j3 * math.cos(2 * phi) + j4 * math.sin(2 * phi))
+
+                                    # Compute the tangential distortion
+                                    delta_t = (m1 * theta + m2 * theta3 + m3 * theta5) * angular
                                 else:
                                     x_t = 0
                                     y_t = 0
