@@ -736,8 +736,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_d = y_r + y_t
 
                             elif camera_model == "Kannala":
-                                # TODO: In progress
-
                                 # Radial distortion coefficients
                                 r = math.sqrt(x * x + y * y)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
@@ -757,28 +755,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_r = y * scale
 
                                 # Tangent distortion coefficients
-                                if support_external_parameters:
-                                    # TODO: Given Parameters
-                                    j1, j2, j3, j4 = 0, 0, 0, 0
-                                    m1, m2, m3 = 0, 0, 0
+                                x_t = 0
+                                y_t = 0
 
-                                    theta3 = theta2 * theta
-                                    theta5 = theta4 * theta
-
-                                    # Compute the azimuthal angle phi
-                                    phi = math.atan2(y, x)
-
-                                    # Compute the angular function
-                                    angular = (j1 * math.cos(phi) + j2 * math.sin(phi) +
-                                               j3 * math.cos(2 * phi) + j4 * math.sin(2 * phi))
-
-                                    # Compute the tangential distortion
-                                    delta_t = (m1 * theta + m2 * theta3 + m3 * theta5) * angular
-                                else:
-                                    delta_t = 0
-
-                                x_d = x_r + delta_t
-                                y_d = y_r + delta_t
+                                x_d = x_r + x_t
+                                y_d = y_r + y_t
 
                             elif camera_model == "MEI":
                                 # Normalize
@@ -1094,7 +1075,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 if __name__ == "__main__":
     # frames json item ID
     dl.setenv('rc')
-    item_id = '684e92c7c856ee42edc2b8d5'
+    item_id = '685aa5d70e8ed7647c44f096'
     frames_item = dl.items.get(item_id=item_id)
     # frames_item.open_in_web()
     flags = dict(
