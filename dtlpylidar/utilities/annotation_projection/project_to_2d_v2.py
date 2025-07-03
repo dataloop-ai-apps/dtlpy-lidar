@@ -330,7 +330,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 "Regular", # Regular (OpenCV Regular camera)
                 "Brown",   # Brown–Conrady (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration)
                 "Fisheye", # Fisheye (OpenCV Fisheye camera)
-                "Kannala", # Kannala-Brandt (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration)
+                "Kannala", # Kannala-Brandt (See: https://oulu3dvision.github.io/calibgeneric/Kannala_Brandt_calibration.pdf)
                 "MEI",     # MEI (KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
                 "Custom0", # Custom0
             ]
