@@ -254,6 +254,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # iterate over images that correspond with frame
         images_map = {}
         for idx, image_calibrations in enumerate(frame_images):
+            # if idx != 0:
+            #     continue
             print("Processing image {}/{}...".format(idx + 1, len(frame_images)))
 
             ###############
@@ -641,6 +643,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     position=annotation_translation
                 )
 
+                # TODO: Validate new radial and tangent fixes - Compare to OpenCV
                 # Manual MVP
                 if projection_mode == "Manual":
                     mv = view_matrix @ model_matrix
@@ -675,8 +678,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_r = y * radial
 
                                 # Tangent distortion coefficients
-                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+                                x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+                                y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
+
+                                x_d = x_r + x_t
+                                y_d = y_r + y_t
 
                             elif camera_model == "Brown":
                                 # Normalize
@@ -701,12 +707,16 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 y_r = y * radial
 
                                 # Tangent distortion coefficients
-                                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+                                x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+                                y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
+
+                                x_d = x_r + x_t
+                                y_d = y_r + y_t
 
                             elif camera_model == "Fisheye":
                                 # Radial distortion coefficients
                                 r = math.sqrt(x * x + y * y)
+                                # r = math.sqrt(x * x + y * y + z * z)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                                 theta2 = theta * theta
@@ -716,12 +726,20 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
                                 scale = radial / r if r > 1e-8 else 1.0
-                                x_d = scale * x
-                                y_d = scale * y
+                                x_r = x * scale
+                                y_r = y * scale
+
+                                # Tangent distortion coefficients
+                                x_t = 0
+                                y_t = 0
+
+                                x_d = x_r + x_t
+                                y_d = y_r + y_t
 
                             elif camera_model == "Kannala":
                                 # Radial distortion coefficients
                                 r = math.sqrt(x * x + y * y)
+                                # r = math.sqrt(x * x + y * y + z * z)
                                 theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
 
                                 theta2 = theta * theta
@@ -735,17 +753,20 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                                 radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
                                 scale = radial / r if r > 1e-8 else 1.0
-                                x_r = scale * x
-                                y_r = scale * y
+                                x_r = x * scale
+                                y_r = y * scale
 
                                 # Tangent distortion coefficients
                                 if support_external_parameters:
-                                    r2 = x_r * x_r + y_r * y_r
-                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+                                    r2 = r * r
+                                    x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+                                    y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
                                 else:
-                                    x_d = x_r
-                                    y_d = y_r
+                                    x_t = 0
+                                    y_t = 0
+
+                                x_d = x_r + x_t
+                                y_d = y_r + y_t
 
                             elif camera_model == "MEI":
                                 # Normalize
@@ -766,11 +787,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                                 # Tangent distortion coefficients
                                 if support_external_parameters:
-                                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+                                    x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+                                    y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
                                 else:
-                                    x_d = x_r
-                                    y_d = y_r
+                                    x_t = 0
+                                    y_t = 0
+
+                                x_d = x_r + x_t
+                                y_d = y_r + y_t
 
                             elif camera_model == "Custom0":
                                 # Normalize
@@ -1036,6 +1060,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
         for frame_num in range(frames_count):
             print("Frame number:", frame_num)
 
+            # TODO: Debug
+            if frame_num != 0:
+                continue
+
             #################
             # Handle Images #
             #################
@@ -1053,14 +1081,16 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 if __name__ == "__main__":
     # frames json item ID
-    item_id = 'item_id'
+    dl.setenv('rc')
+    item_id = '684e92c7c856ee42edc2b8d5'
     frames_item = dl.items.get(item_id=item_id)
+    # frames_item.open_in_web()
     flags = dict(
         full_annotations_only=False,
-        project_remotely=False,
+        project_remotely=True,
         support_external_parameters=True,
-        apply_image_undistortion=False,
-        apply_annotation_distortion=True
+        apply_image_undistortion=True,
+        apply_annotation_distortion=False
     )
 
     runner = AnnotationProjection()
