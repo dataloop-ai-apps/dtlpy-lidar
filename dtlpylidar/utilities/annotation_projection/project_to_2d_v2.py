@@ -1087,10 +1087,10 @@ if __name__ == "__main__":
     # frames_item.open_in_web()
     flags = dict(
         full_annotations_only=False,
-        project_remotely=True,
+        project_remotely=False,
         support_external_parameters=True,
-        apply_image_undistortion=True,
-        apply_annotation_distortion=False
+        apply_image_undistortion=False,
+        apply_annotation_distortion=True
     )
 
     runner = AnnotationProjection()
