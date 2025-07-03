@@ -779,12 +779,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                                 # z_r = norm * point_3d[:, 2] / np.abs(point_3d[:, 2])
 
                                 # Tangent distortion coefficients
-                                if support_external_parameters:
-                                    x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
-                                    y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
-                                else:
-                                    x_t = 0
-                                    y_t = 0
+                                x_t = 0
+                                y_t = 0
 
                                 x_d = x_r + x_t
                                 y_d = y_r + y_t
