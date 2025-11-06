@@ -321,3 +321,5 @@ artifacts
 
 data
 *frames.json
+.cursor/rules/mandatory
+.cursor/commands/shared
