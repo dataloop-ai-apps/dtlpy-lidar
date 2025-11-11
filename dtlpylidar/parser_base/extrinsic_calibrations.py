@@ -1,4 +1,5 @@
 from scipy.spatial.transform import Rotation as R
+import numpy as np
 import logging
 
 logger = logging.getLogger(name='dtlpylidar')
@@ -81,12 +82,13 @@ class EulerRotation:
         self.y = y
         self.z = z
 
-    def euler_to_quaternion(self):
+    def euler_to_quaternion(self, degrees: bool = False):
         """
         Change Euler's rotation to Quaternion rotation
+        :param degrees: If True, angles are in degrees; if False, angles are in radians (default: False)
         :return:
         """
-        return R.from_euler('xyz', [self.x, self.y, self.z]).as_quat()
+        return R.from_euler('xyz', [self.x, self.y, self.z], degrees=degrees).as_quat()
 
     def to_json(self):
         """
@@ -117,6 +119,23 @@ class Extrinsic:
             raise TypeError('rotation must be an instance of QuaternionRotation or EulerRotation')
         self.rotation = rotation
         self.translation = translation
+
+    @staticmethod
+    def from_matrix(matrix: np.ndarray):
+        """
+        Extrinsic matrix to Extrinsic object.
+        :param matrix: 4x4 extrinsic matrix
+        :return:
+        """
+        if matrix.shape != (4, 4):
+            raise ValueError(f"Invalid extrinsic matrix shape: {matrix.shape}")
+        
+        quaternion = R.from_matrix(matrix[:3, :3]).as_quat()
+        translation = matrix[:3, 3].tolist()
+        return Extrinsic(
+            rotation=QuaternionRotation(x=quaternion[0], y=quaternion[1], z=quaternion[2], w=quaternion[3]),
+            translation=Translation(x=translation[0], y=translation[1], z=translation[2])
+        )
 
     def to_json(self, translation_key):
         """
