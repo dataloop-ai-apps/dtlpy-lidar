@@ -66,14 +66,16 @@ class CameraModelHandler:
         x = x / z
         y = y / z
         
-        r = math.sqrt(x * x + y * y)
-        r2 = r * r
-        r4 = r2 * r2
-        r6 = r4 * r2
+        # r = math.sqrt(x * x + y * y)
+        r2 = x * x + y * y
         
-        radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
-        x_r = x * radial
-        y_r = y * radial
+        radial_sum = 1.0
+        for idx, ki in enumerate([k1, k2, k3]):
+            if ki != 0.0:
+                radial_sum += ki * r2 ** (idx + 1)
+        
+        x_r = x * radial_sum
+        y_r = y * radial_sum
         
         x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
         y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
@@ -98,19 +100,16 @@ class CameraModelHandler:
         x = x / z
         y = y / z
         
-        r = math.sqrt(x * x + y * y)
-        r2 = r * r
-        r4 = r2 * r2
-        r6 = r4 * r2
-        r8 = r6 * r2
-        r10 = r8 * r2
-        r12 = r10 * r2
-        r14 = r12 * r2
-        r16 = r14 * r2
+        # r = math.sqrt(x * x + y * y)
+        r2 = x * x + y * y
         
-        radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
-        x_r = x * radial
-        y_r = y * radial
+        radial_sum = 1.0
+        for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
+            if ki != 0.0:
+                radial_sum += ki * r2 ** (idx + 1)
+        
+        x_r = x * radial_sum
+        y_r = y * radial_sum
         
         x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
         y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
@@ -127,13 +126,14 @@ class CameraModelHandler:
         
         r = math.sqrt(x * x + y * y)
         theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
-        
         theta2 = theta * theta
-        theta4 = theta2 * theta2
-        theta6 = theta4 * theta2
-        theta8 = theta6 * theta2
         
-        radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
+        radial_sum = 1.0
+        for idx, ki in enumerate([k1, k2, k3, k4]):
+            if ki != 0.0:
+                radial_sum += ki * theta2 ** (idx + 1)
+        
+        radial = theta * radial_sum
         scale = radial / r if r > 1e-8 else 1.0
         
         return x * scale, y * scale
@@ -155,17 +155,14 @@ class CameraModelHandler:
         
         r = math.sqrt(x * x + y * y)
         theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
-        
         theta2 = theta * theta
-        theta4 = theta2 * theta2
-        theta6 = theta4 * theta2
-        theta8 = theta6 * theta2
-        theta10 = theta8 * theta2
-        theta12 = theta10 * theta2
-        theta14 = theta12 * theta2
-        theta16 = theta14 * theta2
         
-        radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
+        radial_sum = 1.0
+        for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
+            if ki != 0.0:
+                radial_sum += ki * theta2 ** (idx + 1)
+        
+        radial = theta * radial_sum
         scale = radial / r if r > 1e-8 else 1.0
         x_r = x * scale
         y_r = y * scale
@@ -198,10 +195,15 @@ class CameraModelHandler:
         x /= z + xi
         y /= z + xi
         
+        # r = math.sqrt(x * x + y * y)
         r2 = x * x + y * y
-        radial = 1.0 + k1 * r2 + k2 * r2 * r2
-        x_r = x * radial
-        y_r = y * radial
+        radial_sum = 1.0
+        for idx, ki in enumerate([k1, k2]):
+            if ki != 0.0:
+                radial_sum += ki * r2 ** (idx + 1)
+        
+        x_r = x * radial_sum
+        y_r = y * radial_sum
         
         if support_external_parameters:
             x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
@@ -241,9 +243,9 @@ class CameraModelHandler:
         ru02 = ru0 * ru0
         
         fD = 1.0
-        for i, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
+        for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
             if ki != 0.0:
-                fD += ki * ru02 ** (i + 1)
+                fD += ki * ru02 ** (idx + 1)
         
         x_r = xu * fD
         y_r = yu * fD
@@ -270,14 +272,16 @@ class CameraModelHandler:
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
                 
-                r = math.sqrt(x * x + y * y)
-                r2 = r * r
-                r4 = r2 * r2
-                r6 = r4 * r2
+                # r = math.sqrt(x * x + y * y)
+                r2 = x * x + y * y
                 
-                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6
-                x_r = x * radial
-                y_r = y * radial
+                radial_sum = 1.0
+                for idx, ki in enumerate([k1, k2, k3]):
+                    if ki != 0.0:
+                        radial_sum += ki * r2 ** (idx + 1)
+                
+                x_r = x * radial_sum
+                y_r = y * radial_sum
                 
                 x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
                 y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
@@ -309,19 +313,16 @@ class CameraModelHandler:
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
                 
-                r = math.sqrt(x * x + y * y)
-                r2 = r * r
-                r4 = r2 * r2
-                r6 = r4 * r2
-                r8 = r6 * r2
-                r10 = r8 * r2
-                r12 = r10 * r2
-                r14 = r12 * r2
-                r16 = r14 * r2
+                # r = math.sqrt(x * x + y * y)
+                r2 = x * x + y * y
                 
-                radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12 + k7 * r14 + k8 * r16
-                x_r = x * radial
-                y_r = y * radial
+                radial_sum = 1.0
+                for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
+                    if ki != 0.0:
+                        radial_sum += ki * r2 ** (idx + 1)
+                
+                x_r = x * radial_sum
+                y_r = y * radial_sum
                 
                 x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
                 y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
@@ -349,13 +350,14 @@ class CameraModelHandler:
                 
                 r = math.sqrt(x * x + y * y)
                 theta = np.arctan(r)
-                
                 theta2 = theta * theta
-                theta4 = theta2 * theta2
-                theta6 = theta4 * theta2
-                theta8 = theta6 * theta2
                 
-                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8)
+                radial_sum = 1.0
+                for idx, ki in enumerate([k1, k2, k3, k4]):
+                    if ki != 0.0:
+                        radial_sum += ki * theta2 ** (idx + 1)
+                
+                radial = theta * radial_sum
                 scale = radial / r if r > 1e-8 else 1.0
                 x_d = scale * x
                 y_d = scale * y
@@ -390,17 +392,14 @@ class CameraModelHandler:
                 
                 r = math.sqrt(x * x + y * y)
                 theta = np.arctan(r)
-                
                 theta2 = theta * theta
-                theta4 = theta2 * theta2
-                theta6 = theta4 * theta2
-                theta8 = theta6 * theta2
-                theta10 = theta8 * theta2
-                theta12 = theta10 * theta2
-                theta14 = theta12 * theta2
-                theta16 = theta14 * theta2
                 
-                radial = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8 + k5 * theta10 + k6 * theta12 + k7 * theta14 + k8 * theta16)
+                radial_sum = 1.0
+                for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
+                    if ki != 0.0:
+                        radial_sum += ki * theta2 ** (idx + 1)
+                
+                radial = theta * radial_sum
                 scale = radial / r if r > 1e-8 else 1.0
                 x_r = scale * x
                 y_r = scale * y
@@ -446,9 +445,12 @@ class CameraModelHandler:
                 y /= z + xi
                 
                 r2 = x * x + y * y
-                radial = 1.0 + k1 * r2 + k2 * r2 * r2
-                x_r = x * radial
-                y_r = y * radial
+                radial_sum = 1.0
+                for idx, ki in enumerate([k1, k2]):
+                    if ki != 0.0:
+                        radial_sum += ki * r2 ** (idx + 1)
+                x_r = x * radial_sum
+                y_r = y * radial_sum
                 
                 if support_external_parameters:
                     x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
@@ -1292,4 +1294,3 @@ if __name__ == "__main__":
         item=frames_item,
         flags=flags
     )
-
