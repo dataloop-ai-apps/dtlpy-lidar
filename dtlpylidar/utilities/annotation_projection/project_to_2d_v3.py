@@ -8,6 +8,7 @@ from tqdm import tqdm
 import cv2
 import math
 from scipy.ndimage import map_coordinates
+from enum import Enum
 
 
 # ============================================================================
@@ -16,7 +17,7 @@ from scipy.ndimage import map_coordinates
 
 # Camera Options:
 # TODO: Put in ReadMe.md (change str to smaller case - add Enum)
-class CameraModel:
+class CameraModel(str, Enum):
     """Camera model type constants."""
     REGULAR = "regular"  # Regular (OpenCV Regular camera)
     BROWN = "brown"      # Brown–Conrady (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration)
@@ -45,14 +46,6 @@ class CameraModelHandler:
             CameraModel.KANNALA: CameraModelHandler.apply_kannala_distortion,
             CameraModel.MEI: CameraModelHandler.apply_mei_distortion,
             CameraModel.CUSTOM0: CameraModelHandler.apply_custom0_distortion,
-        }
-        self.UNDISTORTION_MAP_FUNCTIONS = {
-            CameraModel.REGULAR: CameraModelHandler.create_undistortion_map_regular,
-            CameraModel.BROWN: CameraModelHandler.create_undistortion_map_brown,
-            CameraModel.FISHEYE: CameraModelHandler.create_undistortion_map_fisheye,
-            CameraModel.KANNALA: CameraModelHandler.create_undistortion_map_kannala,
-            CameraModel.MEI: CameraModelHandler.create_undistortion_map_mei,
-            CameraModel.CUSTOM0: CameraModelHandler.create_undistortion_map_custom0,
         }
     
     @staticmethod
@@ -257,101 +250,6 @@ class CameraModelHandler:
         return x_d, y_d
     
     @staticmethod
-    def create_undistortion_map_regular(h, w, fx, fy, cx, cy, skew, **kwargs):
-        """Create undistortion map for Regular camera model."""
-        map_x = np.zeros((h, w), dtype=np.float32)
-        map_y = np.zeros((h, w), dtype=np.float32)
-        
-        for j in range(h):
-            for i in range(w):
-                z = 1.0
-                y = (j - cy) / fy
-                x = (i - cx - skew * y) / fx
-
-                x_d, y_d = CameraModelHandler.apply_regular_distortion(x=x, y=y, z=z, **kwargs)
-                
-                map_x[j, i] = fx * x_d + skew * y_d + cx
-                map_y[j, i] = fy * y_d + cy
-        
-        return map_x, map_y
-    
-    @staticmethod
-    def create_undistortion_map_brown(h, w, fx, fy, cx, cy, skew, **kwargs):
-        """Create undistortion map for Brown camera model."""
-        map_x = np.zeros((h, w), dtype=np.float32)
-        map_y = np.zeros((h, w), dtype=np.float32)
-        
-        for j in range(h):
-            for i in range(w):
-                z = 1.0
-                y = (j - cy) / fy
-                x = (i - cx - skew * y) / fx
-                
-                x_d, y_d = CameraModelHandler.apply_brown_distortion(x=x, y=y, z=z, **kwargs)
-                
-                map_x[j, i] = fx * x_d + skew * y_d + cx
-                map_y[j, i] = fy * y_d + cy
-        
-        return map_x, map_y
-    
-    @staticmethod
-    def create_undistortion_map_fisheye(h, w, fx, fy, cx, cy, skew, **kwargs):
-        """Create undistortion map for Fisheye camera model."""
-        map_x = np.zeros((h, w), dtype=np.float32)
-        map_y = np.zeros((h, w), dtype=np.float32)
-        
-        for j in range(h):
-            for i in range(w):
-                z = 1.0
-                y = (j - cy) / fy
-                x = (i - cx - skew * y) / fx
-                
-                x_d, y_d = CameraModelHandler.apply_fisheye_distortion(x=x, y=y, z=z, **kwargs)
-                
-                map_x[j, i] = fx * x_d + skew * y_d + cx
-                map_y[j, i] = fy * y_d + cy
-        
-        return map_x, map_y
-    
-    @staticmethod
-    def create_undistortion_map_kannala(h, w, fx, fy, cx, cy, skew, **kwargs):
-        """Create undistortion map for Kannala camera model."""
-        map_x = np.zeros((h, w), dtype=np.float32)
-        map_y = np.zeros((h, w), dtype=np.float32)
-        
-        for j in range(h):
-            for i in range(w):
-                z = 1.0
-                y = (j - cy) / fy
-                x = (i - cx - skew * y) / fx
-
-                x_d, y_d = CameraModelHandler.apply_kannala_distortion(x=x, y=y, z=z, **kwargs)
-                
-                map_x[j, i] = fx * x_d + skew * y_d + cx
-                map_y[j, i] = fy * y_d + cy
-        
-        return map_x, map_y
-    
-    @staticmethod
-    def create_undistortion_map_mei(h, w, fx, fy, cx, cy, skew, **kwargs):
-        """Create undistortion map for MEI camera model."""
-        map_x = np.zeros((h, w), dtype=np.float32)
-        map_y = np.zeros((h, w), dtype=np.float32)
-        
-        for j in range(h):
-            for i in range(w):
-                z = 1.0
-                y = (j - cy) / fy
-                x = (i - cx - skew * y) / fx
-                
-                x_d, y_d = CameraModelHandler.apply_mei_distortion(x=x, y=y, z=z, **kwargs)
-                
-                map_x[j, i] = fx * x_d + skew * y_d + cx
-                map_y[j, i] = fy * y_d + cy
-        
-        return map_x, map_y
-    
-    @staticmethod
     def create_undistortion_map_custom0(h, w, fx, fy, cx, cy, skew, **kwargs):
         """Create undistortion map for Custom0 camera model."""
         map_x = np.zeros((h, w), dtype=np.float32)
@@ -372,29 +270,10 @@ class CameraModelHandler:
     
     def apply_distortion_to_point(self, x, y, z, camera_distortion):
         """Apply distortion to a single point based on camera model."""
-        camera_model = camera_distortion["model"]
-        distortion_func = self.DISTORTION_FUNCTIONS.get(camera_model)
-        if distortion_func is None:
-            camera_model_options = list(self.DISTORTION_FUNCTIONS.keys())
-            raise ValueError(
-                f"Unsupported camera model: {camera_model}.\n"
-                f"Supported models are: {camera_model_options}"
-            )
-        x_d, y_d = distortion_func(x, y, z, **camera_distortion)
+        x_d, y_d = self.DISTORTION_FUNCTIONS[camera_distortion["model"]](
+            x=x, y=y, z=z, **camera_distortion
+        )
         return x_d, y_d
-    
-    def create_undistortion_map(self, h, w, fx, fy, cx, cy, skew, camera_distortion):
-        """Create undistortion map for a given camera model."""
-        camera_model = camera_distortion["model"]
-        undistortion_func = self.UNDISTORTION_MAP_FUNCTIONS.get(camera_model)
-        if undistortion_func is None:
-            camera_model_options = list(self.UNDISTORTION_MAP_FUNCTIONS.keys())
-            raise ValueError(
-                f"Unsupported camera model: {camera_model}.\n"
-                f"Supported models are: {camera_model_options}"
-            )
-        map_x, map_y = undistortion_func(h, w, fx, fy, cx, cy, skew, **camera_distortion)
-        return map_x, map_y
 
 
 # ============================================================================
@@ -726,6 +605,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
             if "model" not in camera_distortion:
                 camera_distortion["model"] = CameraModel.REGULAR
                 # camera_distortion["model"] = CameraModel.CUSTOM0
+            else:
+                camera_model = camera_distortion["model"]
+                if camera_model not in list(CameraModel):
+                    raise ValueError(
+                        f"Unsupported camera model: {camera_model}. "
+                        f"Supported models are: {CameraModel.REGULAR} and {CameraModel.CUSTOM0}."
+                    )
 
             ################
             # Undistortion #
@@ -753,9 +639,21 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     # Manual Undistortion
                     if undistort_mode == "Manual":
                         h, w = item.height, item.width
-                        map_x, map_y = self.camera_model_handler.create_undistortion_map(
-                            h, w, fx, fy, cx, cy, skew, camera_distortion
-                        )
+    
+                        map_x = np.zeros((h, w), dtype=np.float32)
+                        map_y = np.zeros((h, w), dtype=np.float32)
+                        for j in range(h):
+                            for i in range(w):
+                                z = 1.0
+                                y = (j - cy) / fy
+                                x = (i - cx - skew * y) / fx
+
+                                x_d, y_d = self.camera_model_handler.apply_distortion_to_point(
+                                    x=x, y=y, z=z, camera_distortion=camera_distortion
+                                )
+                                
+                                map_x[j, i] = fx * x_d + skew * y_d + cx
+                                map_y[j, i] = fy * y_d + cy
                         
                         image = cv2.imread(image_path)
 
@@ -771,8 +669,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         #     [undistorted_r, undistorted_g, undistorted_b], axis=2).astype(np.uint8)
 
                         # Option 2: Using remap (faster)
-                        undistorted = cv2.remap(image, map_x, map_y, interpolation=cv2.INTER_LINEAR,
-                                                borderMode=cv2.BORDER_REFLECT)
+                        undistorted = cv2.remap(
+                            image, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT
+                        )
 
                     # OpenCV Undistortion
                     elif undistort_mode == "OpenCV":
@@ -867,18 +766,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         continue  # Skip if any point is behind the camera
 
                     # Distortion
+                    if apply_annotation_distortion:
+                        projection_function = self.camera_model_handler.apply_distortion_to_point
+                    else:
+                        # If no distortion, just use the projected pixel directly
+                        projection_function = lambda x, y, z, camera_distortion: (x / z, y / z)
+                    
                     annotation_pixels = []
                     for point_3d in points_3d:
                         (x, y, z) = point_3d
-                        if apply_annotation_distortion:
-                            x_d, y_d = self.camera_model_handler.apply_distortion_to_point(
-                                x, y, z, camera_distortion
-                            )
-                        else:
-                            # If no distortion, just use the projected pixel directly
-                            x_d = x / z
-                            y_d = y / z
-
+                        x_d, y_d = projection_function(
+                            x=x, y=y, z=z, camera_distortion=camera_distortion
+                        )
                         # Convert back to pixel coordinates
                         mv_points = np.array([x_d, y_d, 1, 1])
                         mvp_points = projection_matrix @ mv_points
