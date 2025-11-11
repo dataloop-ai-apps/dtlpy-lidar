@@ -1,4 +1,3 @@
-import dtlpy as dl
 import os
 import json
 import uuid
@@ -6,9 +5,15 @@ import logging
 import shutil
 import pathlib
 import numpy as np
+import dtlpy as dl
 
-from dtlpylidar.parser_base import (extrinsic_calibrations, images_and_pcds, camera_calibrations, lidar_frame,
-                                    lidar_scene)
+from dtlpylidar.parser_base import (
+    extrinsic_calibrations,
+    images_and_pcds,
+    camera_calibrations,
+    lidar_frame,
+    lidar_scene,
+)
 from dtlpylidar.utilities import transformations
 
 logger = logging.Logger(name="custom_base_parser")
@@ -16,8 +21,7 @@ logger = logging.Logger(name="custom_base_parser")
 
 class CustomBaseParser(dl.BaseServiceRunner):
     # TODO: Override this method in the derived class if needed
-    @staticmethod
-    def download_data(dataset: dl.Dataset, remote_path: str, download_path: str) -> tuple:
+    def download_data(self, dataset: dl.Dataset, remote_path: str, download_path: str, **kwargs) -> tuple:
         """
         Download the required data for the parser
         :param dataset: Input dataset
@@ -41,8 +45,7 @@ class CustomBaseParser(dl.BaseServiceRunner):
         return items_path, json_path
 
     # TODO: Override this method in the derived class if needed
-    @staticmethod
-    def parse_lidar_data(items_path: str, json_path: str) -> dict:
+    def parse_lidar_data(self, items_path: str, json_path: str, **kwargs) -> dict:
         """
         Parse the LiDAR Calibration data to build all the scene LidarPcdData objects
         :param items_path: Paths to the downloaded items directory
@@ -67,8 +70,12 @@ class CustomBaseParser(dl.BaseServiceRunner):
             with open(lidar_json, 'r') as f:
                 lidar_json_data = json.load(f)
 
-            ground_map_id = lidar_json_data.get("metadata", dict()).get("user", dict()).get(
-                "lidar_ground_detection", dict()).get("groundMapId", None)
+            ground_map_id = (
+                lidar_json_data.get("metadata", dict())
+                .get("user", dict())
+                .get("lidar_ground_detection", dict())
+                .get("groundMapId", None)
+            )
 
             lidar_translation = extrinsic_calibrations.Translation(x=0, y=0, z=0)
             lidar_rotation = extrinsic_calibrations.QuaternionRotation(x=0, y=0, z=0, w=1)
@@ -78,19 +85,15 @@ class CustomBaseParser(dl.BaseServiceRunner):
                 item_id=lidar_json_data.get("id"),
                 ground_id=ground_map_id,
                 remote_path=lidar_json_data.get("filename"),
-                extrinsic=extrinsic_calibrations.Extrinsic(
-                    rotation=lidar_rotation,
-                    translation=lidar_translation
-                ),
-                timestamp=lidar_timestamp
+                extrinsic=extrinsic_calibrations.Extrinsic(rotation=lidar_rotation, translation=lidar_translation),
+                timestamp=lidar_timestamp,
             )
             lidar_data[lidar_frame_idx] = lidar_pcd_data
 
         return lidar_data
 
     # TODO: Override this method in the derived class if needed
-    @staticmethod
-    def parse_cameras_data(items_path: str, json_path: str) -> dict:
+    def parse_cameras_data(self, items_path: str, json_path: str, **kwargs) -> dict:
         """
         Parse the Cameras Calibration data to build all the scene LidarCameraData and LidarImageData objects
         :param items_path: Paths to the downloaded items directory
@@ -116,18 +119,17 @@ class CustomBaseParser(dl.BaseServiceRunner):
             lidar_position_idx = [
                 poses_json_data[idx].get("position", dict()).get("x", 0),
                 poses_json_data[idx].get("position", dict()).get("y", 0),
-                poses_json_data[idx].get("position", dict()).get("z", 0)
+                poses_json_data[idx].get("position", dict()).get("z", 0),
             ]
             lidar_heading_idx = [
                 poses_json_data[idx].get("heading", dict()).get("x", 0),
                 poses_json_data[idx].get("heading", dict()).get("y", 0),
                 poses_json_data[idx].get("heading", dict()).get("z", 0),
-                poses_json_data[idx].get("heading", dict()).get("w", 1)
+                poses_json_data[idx].get("heading", dict()).get("w", 1),
             ]
             lidar_rotation_idx = transformations.rotation_matrix_from_quaternion(*lidar_heading_idx)
             lidar_transform_idx = transformations.calc_transform_matrix(
-                rotation=lidar_rotation_idx,
-                position=lidar_position_idx
+                rotation=lidar_rotation_idx, position=lidar_position_idx
             )
             lidar_transform_list.append(lidar_transform_idx)
 
@@ -184,20 +186,19 @@ class CustomBaseParser(dl.BaseServiceRunner):
                 camera_position_idx = [
                     poses_json_data[camera_frame_idx].get("position", dict()).get("x", 0),
                     poses_json_data[camera_frame_idx].get("position", dict()).get("y", 0),
-                    poses_json_data[camera_frame_idx].get("position", dict()).get("z", 0)
+                    poses_json_data[camera_frame_idx].get("position", dict()).get("z", 0),
                 ]
                 camera_heading_idx = [
                     poses_json_data[camera_frame_idx].get("heading", dict()).get("x", 0),
                     poses_json_data[camera_frame_idx].get("heading", dict()).get("y", 0),
                     poses_json_data[camera_frame_idx].get("heading", dict()).get("z", 0),
-                    poses_json_data[camera_frame_idx].get("heading", dict()).get("w", 1)
+                    poses_json_data[camera_frame_idx].get("heading", dict()).get("w", 1),
                 ]
 
                 # Calculate updated camera transform
                 camera_rotation_idx = transformations.rotation_matrix_from_quaternion(*camera_heading_idx)
                 camera_transform_idx = transformations.calc_transform_matrix(
-                    rotation=camera_rotation_idx,
-                    position=camera_position_idx
+                    rotation=camera_rotation_idx, position=camera_position_idx
                 )
                 camera_updated_transform_idx = np.dot(lidar_transform_idx, camera_transform_idx)
                 camera_updated_position_idx = transformations.translation_vector_from_transform_matrix(
@@ -214,42 +215,34 @@ class CustomBaseParser(dl.BaseServiceRunner):
 
                 camera_translation = extrinsic_calibrations.Translation(*camera_updated_position_idx)
                 camera_rotation = extrinsic_calibrations.QuaternionRotation(*camera_updated_heading_idx)
-                camera_distortion = camera_calibrations.Distortion(
-                    k1=0,
-                    k2=0,
-                    k3=0,
-                    p1=0,
-                    p2=0
-                )
+                camera_distortion = camera_calibrations.Distortion(k1=0, k2=0, k3=0, p1=0, p2=0)
                 camera_timestamp = str(timestamps_json_data[camera_frame_idx])
 
                 lidar_camera_data = camera_calibrations.LidarCameraData(
                     intrinsic=camera_intrinsic,
                     extrinsic=extrinsic_calibrations.Extrinsic(
-                        rotation=camera_rotation,
-                        translation=camera_translation
+                        rotation=camera_rotation, translation=camera_translation
                     ),
                     channel=camera_json_data.get("filename"),
                     distortion=camera_distortion,
-                    cam_id=camera_id
+                    cam_id=camera_id,
                 )
 
                 lidar_image_data = images_and_pcds.LidarImageData(
                     item_id=camera_json_data.get("id"),
                     lidar_camera=lidar_camera_data,
                     remote_path=camera_json_data.get("filename"),
-                    timestamp=camera_timestamp
+                    timestamp=camera_timestamp,
                 )
 
                 cameras_data[camera_folder][camera_frame_idx] = {
                     "lidar_camera": lidar_camera_data,
-                    "lidar_image": lidar_image_data
+                    "lidar_image": lidar_image_data,
                 }
 
         return cameras_data
 
-    @staticmethod
-    def build_lidar_scene(lidar_data: dict, cameras_data: dict):
+    def build_lidar_scene(self, lidar_data: dict, cameras_data: dict, **kwargs):
         """
         Merge the all the object of lidar_data and cameras_data to build the LidarScene object that will be uploaded as
         the frames.json item
@@ -275,8 +268,7 @@ class CustomBaseParser(dl.BaseServiceRunner):
                 lidar_frame_images.append(frame_lidar_image_data)
 
             lidar_scene_frame = lidar_frame.LidarSceneFrame(
-                lidar_frame_pcd=frame_lidar_pcd_data,
-                lidar_frame_images=lidar_frame_images
+                lidar_frame_pcd=frame_lidar_pcd_data, lidar_frame_images=lidar_frame_images
             )
             scene.add_frame(lidar_scene_frame)
 
@@ -284,7 +276,7 @@ class CustomBaseParser(dl.BaseServiceRunner):
         return scene_data
 
     # TODO: Check the possibility to use dir Item instead of remote_path
-    def run(self, dataset: dl.Dataset, remote_path: str = "/") -> dl.Item:
+    def run(self, dataset: dl.Dataset, remote_path: str = "/", **kwargs) -> dl.Item:
         """
         Run the parser
         :param dataset: Input dataset
@@ -301,28 +293,19 @@ class CustomBaseParser(dl.BaseServiceRunner):
         download_path = os.path.join(os.getcwd(), base_path)
         try:
             items_path, json_path = self.download_data(
-                dataset=dataset,
-                remote_path=remote_path,
-                download_path=download_path
+                dataset=dataset, remote_path=remote_path, download_path=download_path
             )
 
-            lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path)
-            cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path)
-            scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data)
+            lidar_data = self.parse_lidar_data(items_path=items_path, json_path=json_path, **kwargs)
+            cameras_data = self.parse_cameras_data(items_path=items_path, json_path=json_path, **kwargs)
+            scene_data = self.build_lidar_scene(lidar_data=lidar_data, cameras_data=cameras_data, **kwargs)
 
             frames_item = dataset.items.upload(
                 remote_name="frames.json",
                 remote_path=f"/{remote_path}",
                 local_path=json.dumps(scene_data).encode(),
                 overwrite=True,
-                item_metadata={
-                    "system": {
-                        "shebang": {
-                            "dltype": "PCDFrames"
-                        }
-                    },
-                    "fps": 1
-                }
+                item_metadata={"system": {"shebang": {"dltype": "PCDFrames"}}, "fps": 1},
             )
         finally:
             shutil.rmtree(path=download_path, ignore_errors=True)

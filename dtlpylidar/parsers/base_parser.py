@@ -1,13 +1,18 @@
 import os
-import dtlpy as dl
 import json
 from io import BytesIO
 import uuid
 import logging
 import shutil
+import dtlpy as dl
 
-from dtlpylidar.parser_base import (extrinsic_calibrations, images_and_pcds, camera_calibrations, lidar_frame,
-                                    lidar_scene)
+from dtlpylidar.parser_base import (
+    extrinsic_calibrations,
+    images_and_pcds,
+    camera_calibrations,
+    lidar_frame,
+    lidar_scene,
+)
 
 logger = logging.Logger(name="file_mapping_parser")
 
@@ -55,28 +60,29 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         for frame_num, frame_details in frames.items():
             logger.info(f"Search PCD {frame_num}")
             if frame_details.get("path").startswith("/"):
-                pcd_filepath = os.path.join(self.jsons_path,
-                                            frame_details.get("path").lstrip('/'))
+                pcd_filepath = os.path.join(self.jsons_path, frame_details.get("path").lstrip('/'))
             else:
-                pcd_filepath = os.path.join(self.jsons_path,
-                                            mapping_item.dir.lstrip('/'),
-                                            frame_details.get("path"))
+                pcd_filepath = os.path.join(self.jsons_path, mapping_item.dir.lstrip('/'), frame_details.get("path"))
             pcd_filepath = pcd_filepath.replace(".pcd", ".json")
             with open(pcd_filepath, 'r') as f:
                 pcd_json = json.load(f)
 
-            ground_map_id = pcd_json.get("metadata", dict()).get("user", dict()).get(
-                "lidar_ground_detection", dict()).get("groundMapId", None)
+            ground_map_id = (
+                pcd_json.get("metadata", dict())
+                .get("user", dict())
+                .get("lidar_ground_detection", dict())
+                .get("groundMapId", None)
+            )
             pcd_translation = extrinsic_calibrations.Translation(
                 x=frame_details.get("position", dict()).get("x", 0),
                 y=frame_details.get("position", dict()).get("y", 0),
-                z=frame_details.get("position", dict()).get("z", 0)
+                z=frame_details.get("position", dict()).get("z", 0),
             )
             pcd_rotation = extrinsic_calibrations.QuaternionRotation(
                 x=frame_details.get("heading", dict()).get("x", 0),
                 y=frame_details.get("heading", dict()).get("y", 0),
                 z=frame_details.get("heading", dict()).get("z", 0),
-                w=frame_details.get("heading", dict()).get("w", 1)
+                w=frame_details.get("heading", dict()).get("w", 1),
             )
             pcd_time_stamp = frame_details.get("timestamp", "")
 
@@ -84,23 +90,19 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
                 item_id=pcd_json.get("id"),
                 ground_id=ground_map_id,
                 remote_path=pcd_json.get("filename"),
-                extrinsic=extrinsic_calibrations.Extrinsic(
-                    rotation=pcd_rotation,
-                    translation=pcd_translation
-                ),
-                timestamp=pcd_time_stamp
+                extrinsic=extrinsic_calibrations.Extrinsic(rotation=pcd_rotation, translation=pcd_translation),
+                timestamp=pcd_time_stamp,
             )
             lidar_frame_images = list()
             frame_images = frame_details.get("images", list())
             for image_num, image_details in frame_images.items():
                 logger.info(f"Search image {image_num} for frame {frame_num}")
                 if image_details.get("image_path").startswith("/"):
-                    image_filepath = os.path.join(self.jsons_path,
-                                                  image_details.get("image_path").lstrip('/'))
+                    image_filepath = os.path.join(self.jsons_path, image_details.get("image_path").lstrip('/'))
                 else:
-                    image_filepath = os.path.join(self.jsons_path,
-                                                  mapping_item.dir.lstrip('/'),
-                                                  image_details.get("image_path"))
+                    image_filepath = os.path.join(
+                        self.jsons_path, mapping_item.dir.lstrip('/'), image_details.get("image_path")
+                    )
 
                 image_ext = os.path.splitext(image_filepath)[1]
                 image_filepath = image_filepath.replace(image_ext, ".json")
@@ -112,34 +114,31 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
                 camera_translation = extrinsic_calibrations.Translation(
                     x=image_details.get("extrinsics", dict()).get("translation").get("x", 0),
                     y=image_details.get("extrinsics", dict()).get("translation").get("y", 0),
-                    z=image_details.get("extrinsics", dict()).get("translation").get("z", 0)
+                    z=image_details.get("extrinsics", dict()).get("translation").get("z", 0),
                 )
                 camera_rotation = extrinsic_calibrations.QuaternionRotation(
                     x=image_details.get("extrinsics", dict()).get("rotation").get("x", 0),
                     y=image_details.get("extrinsics", dict()).get("rotation").get("y", 0),
                     z=image_details.get("extrinsics", dict()).get("rotation").get("z", 0),
-                    w=image_details.get("extrinsics", dict()).get("rotation").get("w", 1)
+                    w=image_details.get("extrinsics", dict()).get("rotation").get("w", 1),
                 )
                 camera_intrinsic = camera_calibrations.Intrinsic(
                     fx=image_details.get("intrinsics", dict()).get("fx", 1),
                     fy=image_details.get("intrinsics", dict()).get("fy", 1),
                     cx=image_details.get("intrinsics", dict()).get("cx", 0),
                     cy=image_details.get("intrinsics", dict()).get("cy", 0),
-                    skew=image_details.get("intrinsics", dict()).get("skew", 0)
+                    skew=image_details.get("intrinsics", dict()).get("skew", 0),
                 )
-                camera_distortion = camera_calibrations.Distortion(
-                    **image_details.get("distortion", dict())
-                )
+                camera_distortion = camera_calibrations.Distortion(**image_details.get("distortion", dict()))
 
                 lidar_camera = camera_calibrations.LidarCameraData(
                     cam_id=camera_id,
                     intrinsic=camera_intrinsic,
                     extrinsic=extrinsic_calibrations.Extrinsic(
-                        rotation=camera_rotation,
-                        translation=camera_translation
+                        rotation=camera_rotation, translation=camera_translation
                     ),
                     channel=image_details.get("image_path"),
-                    distortion=camera_distortion
+                    distortion=camera_distortion,
                 )
 
                 scene.add_camera(lidar_camera)
@@ -147,13 +146,12 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
                     item_id=image_json.get("id"),
                     lidar_camera=lidar_camera,
                     remote_path=image_json.get("filename"),
-                    timestamp=image_timestamp
+                    timestamp=image_timestamp,
                 )
                 lidar_frame_images.append(scene_image_item)
 
             frame_item = lidar_frame.LidarSceneFrame(
-                lidar_frame_pcd=scene_pcd_item,
-                lidar_frame_images=lidar_frame_images
+                lidar_frame_pcd=scene_pcd_item, lidar_frame_images=lidar_frame_images
             )
             scene.add_frame(frame_item)
         buffer = BytesIO()
@@ -164,14 +162,7 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
             remote_path="{}".format(mapping_item.dir),
             local_path=buffer,
             overwrite=True,
-            item_metadata={
-                "system": {
-                    "shebang": {
-                        "dltype": "PCDFrames"
-                    }
-                },
-                "fps": 1
-            }
+            item_metadata={"system": {"shebang": {"dltype": "PCDFrames"}}, "fps": 1},
         )
         return frames_item
 
