@@ -14,14 +14,16 @@ from scipy.ndimage import map_coordinates
 # CONSTANTS
 # ============================================================================
 
+# Camera Options:
+# TODO: Put in ReadMe.md (change str to smaller case - add Enum)
 class CameraModel:
     """Camera model type constants."""
-    REGULAR = "Regular"
-    BROWN = "Brown"
-    FISHEYE = "Fisheye"
-    KANNALA = "Kannala"
-    MEI = "MEI"
-    CUSTOM0 = "Custom0"
+    REGULAR = "regular"  # Regular (OpenCV Regular camera)
+    BROWN = "brown"      # Brown–Conrady (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration)
+    FISHEYE = "fisheye"  # Fisheye (OpenCV Fisheye camera)
+    KANNALA = "kannala"  # Kannala-Brandt (See: https://oulu3dvision.github.io/calibgeneric/Kannala_Brandt_calibration.pdf)
+    MEI = "mei"          # MEI (KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
+    CUSTOM0 = "custom0"  # Custom0
 
 
 # ============================================================================
@@ -80,7 +82,9 @@ class CameraModelHandler:
         x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
         y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
         
-        return x_r + x_t, y_r + y_t
+        x_d = x_r + x_t
+        y_d = y_r + y_t
+        return x_d, y_d
     
     @staticmethod
     def apply_brown_distortion(x, y, z, **kwargs):
@@ -114,7 +118,9 @@ class CameraModelHandler:
         x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
         y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
         
-        return x_r + x_t, y_r + y_t
+        x_d = x_r + x_t
+        y_d = y_r + y_t
+        return x_d, y_d
     
     @staticmethod
     def apply_fisheye_distortion(x, y, z, **kwargs):
@@ -135,8 +141,10 @@ class CameraModelHandler:
         
         radial = theta * radial_sum
         scale = radial / r if r > 1e-8 else 1.0
-        
-        return x * scale, y * scale
+
+        x_d = x * scale
+        y_d = y * scale
+        return x_d, y_d
     
     @staticmethod
     def apply_kannala_distortion(x, y, z, **kwargs):
@@ -149,9 +157,8 @@ class CameraModelHandler:
         k6 = kwargs.get('k6', 0.0)
         k7 = kwargs.get('k7', 0.0)
         k8 = kwargs.get('k8', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
-        support_external_parameters = kwargs.get('support_external_parameters', True)
+        p1 = kwargs.get('p1', None)
+        p2 = kwargs.get('p2', None)
         
         r = math.sqrt(x * x + y * y)
         theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
@@ -167,25 +174,22 @@ class CameraModelHandler:
         x_r = x * scale
         y_r = y * scale
         
-        if support_external_parameters:
+        if p1 is not None and p2 is not None:
             r2 = x_r * x_r + y_r * y_r
             x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
             y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+            return x_d, y_d
         else:
-            x_d = x_r
-            y_d = y_r
-        
-        return x_d, y_d
+            return x_r, y_r
     
     @staticmethod
     def apply_mei_distortion(x, y, z, **kwargs):
         """Apply MEI camera model distortion."""
         k1 = kwargs.get('k1', 0.0)
         k2 = kwargs.get('k2', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
+        p1 = kwargs.get('p1', None)
+        p2 = kwargs.get('p2', None)
         xi = kwargs.get('xi', 0.0)
-        support_external_parameters = kwargs.get('support_external_parameters', True)
         
         norm = float(np.linalg.norm(np.array([x, y, z])))
         x = x / norm
@@ -205,14 +209,12 @@ class CameraModelHandler:
         x_r = x * radial_sum
         y_r = y * radial_sum
         
-        if support_external_parameters:
+        if p1 is not None and p2 is not None:
             x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
             y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+            return x_d, y_d
         else:
-            x_d = x_r
-            y_d = y_r
-        
-        return x_d, y_d
+            return x_r, y_r
     
     @staticmethod
     def apply_custom0_distortion(x, y, z, **kwargs):
@@ -252,39 +254,21 @@ class CameraModelHandler:
         
         x_d = x_r + (2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * xu * xu))
         y_d = y_r + (p1 * (ru2 + 2.0 * yu * yu) + 2.0 * p2 * xu * yu)
-        
         return x_d, y_d
     
     @staticmethod
     def create_undistortion_map_regular(h, w, fx, fy, cx, cy, skew, **kwargs):
         """Create undistortion map for Regular camera model."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        k3 = kwargs.get('k3', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
-        
         map_x = np.zeros((h, w), dtype=np.float32)
         map_y = np.zeros((h, w), dtype=np.float32)
         
         for j in range(h):
             for i in range(w):
+                z = 1.0
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
-                
-                # r = math.sqrt(x * x + y * y)
-                r2 = x * x + y * y
-                
-                radial_sum = 1.0
-                for idx, ki in enumerate([k1, k2, k3]):
-                    if ki != 0.0:
-                        radial_sum += ki * r2 ** (idx + 1)
-                
-                x_r = x * radial_sum
-                y_r = y * radial_sum
-                
-                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+
+                x_d, y_d = CameraModelHandler.apply_regular_distortion(x=x, y=y, z=z, **kwargs)
                 
                 map_x[j, i] = fx * x_d + skew * y_d + cx
                 map_y[j, i] = fy * y_d + cy
@@ -294,38 +278,16 @@ class CameraModelHandler:
     @staticmethod
     def create_undistortion_map_brown(h, w, fx, fy, cx, cy, skew, **kwargs):
         """Create undistortion map for Brown camera model."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        k3 = kwargs.get('k3', 0.0)
-        k4 = kwargs.get('k4', 0.0)
-        k5 = kwargs.get('k5', 0.0)
-        k6 = kwargs.get('k6', 0.0)
-        k7 = kwargs.get('k7', 0.0)
-        k8 = kwargs.get('k8', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
-        
         map_x = np.zeros((h, w), dtype=np.float32)
         map_y = np.zeros((h, w), dtype=np.float32)
         
         for j in range(h):
             for i in range(w):
+                z = 1.0
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
                 
-                # r = math.sqrt(x * x + y * y)
-                r2 = x * x + y * y
-                
-                radial_sum = 1.0
-                for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
-                    if ki != 0.0:
-                        radial_sum += ki * r2 ** (idx + 1)
-                
-                x_r = x * radial_sum
-                y_r = y * radial_sum
-                
-                x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+                x_d, y_d = CameraModelHandler.apply_brown_distortion(x=x, y=y, z=z, **kwargs)
                 
                 map_x[j, i] = fx * x_d + skew * y_d + cx
                 map_y[j, i] = fy * y_d + cy
@@ -335,32 +297,16 @@ class CameraModelHandler:
     @staticmethod
     def create_undistortion_map_fisheye(h, w, fx, fy, cx, cy, skew, **kwargs):
         """Create undistortion map for Fisheye camera model."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        k3 = kwargs.get('k3', 0.0)
-        k4 = kwargs.get('k4', 0.0)
-        
         map_x = np.zeros((h, w), dtype=np.float32)
         map_y = np.zeros((h, w), dtype=np.float32)
         
         for j in range(h):
             for i in range(w):
+                z = 1.0
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
                 
-                r = math.sqrt(x * x + y * y)
-                theta = np.arctan(r)
-                theta2 = theta * theta
-                
-                radial_sum = 1.0
-                for idx, ki in enumerate([k1, k2, k3, k4]):
-                    if ki != 0.0:
-                        radial_sum += ki * theta2 ** (idx + 1)
-                
-                radial = theta * radial_sum
-                scale = radial / r if r > 1e-8 else 1.0
-                x_d = scale * x
-                y_d = scale * y
+                x_d, y_d = CameraModelHandler.apply_fisheye_distortion(x=x, y=y, z=z, **kwargs)
                 
                 map_x[j, i] = fx * x_d + skew * y_d + cx
                 map_y[j, i] = fy * y_d + cy
@@ -370,47 +316,16 @@ class CameraModelHandler:
     @staticmethod
     def create_undistortion_map_kannala(h, w, fx, fy, cx, cy, skew, **kwargs):
         """Create undistortion map for Kannala camera model."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        k3 = kwargs.get('k3', 0.0)
-        k4 = kwargs.get('k4', 0.0)
-        k5 = kwargs.get('k5', 0.0)
-        k6 = kwargs.get('k6', 0.0)
-        k7 = kwargs.get('k7', 0.0)
-        k8 = kwargs.get('k8', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
-        support_external_parameters = kwargs.get('support_external_parameters', True)
-        
         map_x = np.zeros((h, w), dtype=np.float32)
         map_y = np.zeros((h, w), dtype=np.float32)
         
         for j in range(h):
             for i in range(w):
+                z = 1.0
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
-                
-                r = math.sqrt(x * x + y * y)
-                theta = np.arctan(r)
-                theta2 = theta * theta
-                
-                radial_sum = 1.0
-                for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
-                    if ki != 0.0:
-                        radial_sum += ki * theta2 ** (idx + 1)
-                
-                radial = theta * radial_sum
-                scale = radial / r if r > 1e-8 else 1.0
-                x_r = scale * x
-                y_r = scale * y
-                
-                if support_external_parameters:
-                    r2 = x_r * x_r + y_r * y_r
-                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
-                else:
-                    x_d = x_r
-                    y_d = y_r
+
+                x_d, y_d = CameraModelHandler.apply_kannala_distortion(x=x, y=y, z=z, **kwargs)
                 
                 map_x[j, i] = fx * x_d + skew * y_d + cx
                 map_y[j, i] = fy * y_d + cy
@@ -420,13 +335,6 @@ class CameraModelHandler:
     @staticmethod
     def create_undistortion_map_mei(h, w, fx, fy, cx, cy, skew, **kwargs):
         """Create undistortion map for MEI camera model."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
-        xi = kwargs.get('xi', 0.0)
-        support_external_parameters = kwargs.get('support_external_parameters', True)
-        
         map_x = np.zeros((h, w), dtype=np.float32)
         map_y = np.zeros((h, w), dtype=np.float32)
         
@@ -436,28 +344,7 @@ class CameraModelHandler:
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
                 
-                norm = float(np.linalg.norm(np.array([x, y, z])))
-                x = x / norm
-                y = y / norm
-                z = z / norm
-                
-                x /= z + xi
-                y /= z + xi
-                
-                r2 = x * x + y * y
-                radial_sum = 1.0
-                for idx, ki in enumerate([k1, k2]):
-                    if ki != 0.0:
-                        radial_sum += ki * r2 ** (idx + 1)
-                x_r = x * radial_sum
-                y_r = y * radial_sum
-                
-                if support_external_parameters:
-                    x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-                    y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
-                else:
-                    x_d = x_r
-                    y_d = y_r
+                x_d, y_d = CameraModelHandler.apply_mei_distortion(x=x, y=y, z=z, **kwargs)
                 
                 map_x[j, i] = fx * x_d + skew * y_d + cx
                 map_y[j, i] = fy * y_d + cy
@@ -467,18 +354,6 @@ class CameraModelHandler:
     @staticmethod
     def create_undistortion_map_custom0(h, w, fx, fy, cx, cy, skew, **kwargs):
         """Create undistortion map for Custom0 camera model."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        k3 = kwargs.get('k3', 0.0)
-        k4 = kwargs.get('k4', 0.0)
-        k5 = kwargs.get('k5', 0.0)
-        k6 = kwargs.get('k6', 0.0)
-        k7 = kwargs.get('k7', 0.0)
-        k8 = kwargs.get('k8', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
-        r0 = kwargs.get('r0', 0.0)
-        
         map_x = np.zeros((h, w), dtype=np.float32)
         map_y = np.zeros((h, w), dtype=np.float32)
         
@@ -488,37 +363,16 @@ class CameraModelHandler:
                 y = (j - cy) / fy
                 x = (i - cx - skew * y) / fx
                 
-                n2 = x * x + y * y
-                r2 = n2 + z * z
-                invR = 1.0 / np.sqrt(r2) if r2 != 0.0 else 0.0
-                invN = 1.0 / np.sqrt(n2) if n2 != 0.0 else 0.0
-                
-                theta = np.arccos(z * invR)
-                xu = theta * x * invN
-                yu = theta * y * invN
-                ru2 = xu * xu + yu * yu
-                ru = np.sqrt(ru2)
-                ru0 = ru - r0
-                ru02 = ru0 * ru0
-                
-                fD = 1.0
-                for idx, ki in enumerate([k1, k2, k3, k4, k5, k6, k7, k8]):
-                    if ki != 0.0:
-                        fD += ki * ru02 ** (idx + 1)
-                
-                x_r = xu * fD
-                y_r = yu * fD
-                
-                x_d = x_r + (2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * xu * xu))
-                y_d = y_r + (p1 * (ru2 + 2.0 * yu * yu) + 2.0 * p2 * xu * yu)
+                x_d, y_d = CameraModelHandler.apply_custom0_distortion(x=x, y=y, z=z, **kwargs)
                 
                 map_x[j, i] = fx * x_d + skew * y_d + cx
                 map_y[j, i] = fy * y_d + cy
         
         return map_x, map_y
     
-    def apply_distortion_to_point(self, x, y, z, camera_model, **kwargs):
+    def apply_distortion_to_point(self, x, y, z, camera_distortion):
         """Apply distortion to a single point based on camera model."""
+        camera_model = camera_distortion["model"]
         distortion_func = self.DISTORTION_FUNCTIONS.get(camera_model)
         if distortion_func is None:
             camera_model_options = list(self.DISTORTION_FUNCTIONS.keys())
@@ -526,7 +380,21 @@ class CameraModelHandler:
                 f"Unsupported camera model: {camera_model}.\n"
                 f"Supported models are: {camera_model_options}"
             )
-        return distortion_func(x, y, z, **kwargs)
+        x_d, y_d = distortion_func(x, y, z, **camera_distortion)
+        return x_d, y_d
+    
+    def create_undistortion_map(self, h, w, fx, fy, cx, cy, skew, camera_distortion):
+        """Create undistortion map for a given camera model."""
+        camera_model = camera_distortion["model"]
+        undistortion_func = self.UNDISTORTION_MAP_FUNCTIONS.get(camera_model)
+        if undistortion_func is None:
+            camera_model_options = list(self.UNDISTORTION_MAP_FUNCTIONS.keys())
+            raise ValueError(
+                f"Unsupported camera model: {camera_model}.\n"
+                f"Supported models are: {camera_model_options}"
+            )
+        map_x, map_y = undistortion_func(h, w, fx, fy, cx, cy, skew, **camera_distortion)
+        return map_x, map_y
 
 
 # ============================================================================
@@ -791,8 +659,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # Parse flags
         # TODO: Replace as reading from Context and add example
         full_annotations_only = flags.get("full_annotations_only", False)
-        project_remotely = flags.get("project_remotely", False)
-        support_external_parameters = flags.get("support_external_parameters", True)
+        project_remotely = flags.get("project_remotely", True)
         apply_image_undistortion = flags.get("apply_image_undistortion", False)
         apply_annotation_distortion = flags.get("apply_annotation_distortion", True)
 
@@ -854,31 +721,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
             projection_matrix = self.mvp_calculator.calculate_projection_matrix(fx, fy, cx, cy, skew)
 
             camera_distortion = intrinsic_data.get('distortion', dict())
-            k1 = camera_distortion.get("k1", 0.0)
-            k2 = camera_distortion.get("k2", 0.0)
-            k3 = camera_distortion.get("k3", 0.0)
-            k4 = camera_distortion.get("k4", 0.0)
-            k5 = camera_distortion.get("k5", 0.0)
-            k6 = camera_distortion.get("k6", 0.0)
-            k7 = camera_distortion.get("k7", 0.0)
-            k8 = camera_distortion.get("k8", 0.0)
-            p1 = camera_distortion.get("p1", 0.0)
-            p2 = camera_distortion.get("p2", 0.0)
-            xi = camera_distortion.get('xi', 0.0)
-            r0 = camera_distortion.get('r0', 0.0)
 
-            # Camera Options:
-            # TODO: Put in ReadMe.md (change str to smaller case - add Enum)
-            camera_model_options = [
-                CameraModel.REGULAR,  # Regular (OpenCV Regular camera)
-                CameraModel.BROWN,   # Brown–Conrady (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration)
-                CameraModel.FISHEYE, # Fisheye (OpenCV Fisheye camera)
-                CameraModel.KANNALA, # Kannala-Brandt (See: https://oulu3dvision.github.io/calibgeneric/Kannala_Brandt_calibration.pdf)
-                CameraModel.MEI,     # MEI (KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
-                CameraModel.CUSTOM0, # Custom0
-            ]
-            camera_model = camera_distortion.get('model', CameraModel.REGULAR)
-            # camera_model = CameraModel.CUSTOM0
+            # Default Camera Model
+            if "model" not in camera_distortion:
+                camera_distortion["model"] = CameraModel.REGULAR
+                # camera_distortion["model"] = CameraModel.CUSTOM0
 
             ################
             # Undistortion #
@@ -906,21 +753,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     # Manual Undistortion
                     if undistort_mode == "Manual":
                         h, w = item.height, item.width
-                        
-                        undistortion_func = self.camera_model_handler.UNDISTORTION_MAP_FUNCTIONS.get(camera_model)
-                        if undistortion_func is None:
-                            raise ValueError(
-                                f"Unsupported camera model: {camera_model}. "
-                                f"Supported models are: {camera_model_options}."
-                            )
-                        
-                        map_x, map_y = undistortion_func(
-                            h, w, fx, fy, cx, cy, skew,
-                            k1=k1, k2=k2, k3=k3, k4=k4, k5=k5, k6=k6, k7=k7, k8=k8,
-                            p1=p1, p2=p2, xi=xi, r0=r0,
-                            support_external_parameters=support_external_parameters
+                        map_x, map_y = self.camera_model_handler.create_undistortion_map(
+                            h, w, fx, fy, cx, cy, skew, camera_distortion
                         )
-
+                        
                         image = cv2.imread(image_path)
 
                         # Option 1: Using map_coordinates (slower)
@@ -938,41 +774,53 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         undistorted = cv2.remap(image, map_x, map_y, interpolation=cv2.INTER_LINEAR,
                                                 borderMode=cv2.BORDER_REFLECT)
 
-                        # Save or display
-                        cv2.imwrite(output_image_path, undistorted)
-
                     # OpenCV Undistortion
                     elif undistort_mode == "OpenCV":
+                        camera_model = camera_distortion["model"]
+                        k1 = camera_distortion.get("k1", 0.0)
+                        k2 = camera_distortion.get("k2", 0.0)
+                        k3 = camera_distortion.get("k3", 0.0)
+                        k4 = camera_distortion.get("k4", 0.0)
+                        p1 = camera_distortion.get("p1", 0.0)
+                        p2 = camera_distortion.get("p2", 0.0)
+
                         # Distortion coefficients
-                        D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                        if camera_model == CameraModel.REGULAR:
+                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
 
-                        # Original distorted image
-                        image = cv2.imread(image_path)
-                        h, w = image.shape[:2]
+                            # Original distorted image
+                            image = cv2.imread(image_path)
+                            h, w = image.shape[:2]
 
-                        # Build K matrix for OpenCV
-                        K = np.array([
-                            [fx, skew, cx],
-                            [0, fy, cy],
-                            [0, 0, 1]
-                        ])
+                            # Build K matrix for OpenCV
+                            K = np.array([
+                                [fx, skew, cx],
+                                [0, fy, cy],
+                                [0, 0, 1]
+                            ])
 
-                        # Compute optimal rectified camera matrix (keeps FOV)
-                        new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w, h))
+                            # Compute optimal rectified camera matrix (keeps FOV)
+                            new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w, h))
 
-                        # Undistort
-                        undistorted = cv2.undistort(image, K, D, None, new_K)
-
-                        # Save or display
-                        x, y, w, h = roi
-                        undistorted = undistorted[y:y + h, x:x + w]
-                        cv2.imwrite(output_image_path, undistorted)
+                            # Undistort
+                            undistorted = cv2.undistort(image, K, D, None, new_K)
+                            x, y, w, h = roi
+                            undistorted = undistorted[y:y + h, x:x + w]
+                        else:
+                            raise ValueError(
+                                f"[OpenCV] Unsupported camera model: {camera_model}. "
+                                f"Supported models are: {CameraModel.REGULAR}."
+                            )
 
                     else:
                         raise ValueError(
                             f"Unsupported undistort mode: {undistort_mode}. "
                             f"Supported modes are 'Manual' and 'OpenCV'."
                         )
+                    
+                    # Save locally
+                    cv2.imwrite(output_image_path, undistorted)
+
                 else:
                     # Overwrite annotated image
                     image = cv2.imread(image_path)
@@ -1024,10 +872,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         (x, y, z) = point_3d
                         if apply_annotation_distortion:
                             x_d, y_d = self.camera_model_handler.apply_distortion_to_point(
-                                x, y, z, camera_model,
-                                k1=k1, k2=k2, k3=k3, k4=k4, k5=k5, k6=k6, k7=k7, k8=k8,
-                                p1=p1, p2=p2, xi=xi, r0=r0,
-                                support_external_parameters=support_external_parameters
+                                x, y, z, camera_distortion
                             )
                         else:
                             # If no distortion, just use the projected pixel directly
@@ -1042,9 +887,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     annotation_pixels = np.array(annotation_pixels)
 
                 # OpenCV MVP
-                else:
-                    # if support_external_parameters:
-                    #     raise ValueError("OpenCV projection mode does not support external parameters.")
+                elif projection_mode == "OpenCV":
+                    camera_model = camera_distortion["model"]
+                    k1 = camera_distortion.get("k1", 0.0)
+                    k2 = camera_distortion.get("k2", 0.0)
+                    k3 = camera_distortion.get("k3", 0.0)
+                    k4 = camera_distortion.get("k4", 0.0)
+                    p1 = camera_distortion.get("p1", 0.0)
+                    p2 = camera_distortion.get("p2", 0.0)
 
                     mv = view_matrix @ model_matrix  # Model View matrix
                     K = projection_matrix[:3, :3]  # Projection matrix
@@ -1079,8 +929,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
                         else:
                             raise ValueError(
-                                f"Unsupported camera model: {camera_model}.\n"
-                                f"Supported models are 'Regular' and 'Fisheye'."
+                                f"[OpenCV] Unsupported camera model: {camera_model}.\n"
+                                f"Supported models are: {CameraModel.REGULAR} and {CameraModel.FISHEYE}."
                             )
                     else:
                         D = np.zeros((5,), dtype=np.float64)
@@ -1088,6 +938,12 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                     # points_2d: (N, 1, 2) - OpenCV format
                     annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+                
+                else:
+                    raise ValueError(
+                        f"Unsupported projection mode: {projection_mode}. "
+                        f"Supported modes are: 'Manual' and 'OpenCV'."
+                    )
 
                 # Select annotation option based on the projection mode
                 if project_remotely:
@@ -1212,7 +1068,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param flags: dictionary with flags:
         - full_annotations_only: if True, only full annotations will be projected to 2D
         - project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
-        - support_external_parameters: if True, support external parameters for the projection (Like: k4, k5, k6, k7, k8)
         - apply_image_undistortion: if True, apply image undistortion to the images before projection
         - apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
         :return: None
@@ -1277,16 +1132,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 if __name__ == "__main__":
     # frames json item ID
-    dl.setenv('rc')
     item_id = 'XXXX'
     frames_item = dl.items.get(item_id=item_id)
     # frames_item.open_in_web()
     flags = dict(
         full_annotations_only=False,
         project_remotely=False,
-        support_external_parameters=True,
         apply_image_undistortion=False,
-        apply_annotation_distortion=False
+        apply_annotation_distortion=True,
     )
 
     runner = AnnotationProjection()
