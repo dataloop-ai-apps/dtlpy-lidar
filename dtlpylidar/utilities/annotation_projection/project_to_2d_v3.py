@@ -1,7 +1,6 @@
 import dtlpy as dl
 import os
 import numpy as np
-import uuid
 import json
 import dtlpylidar.utilities.transformations as transformations
 from tqdm import tqdm
@@ -9,6 +8,7 @@ import cv2
 import math
 from scipy.ndimage import map_coordinates
 from enum import Enum
+# import uuid
 
 
 # ============================================================================
@@ -16,15 +16,21 @@ from enum import Enum
 # ============================================================================
 
 # Camera Options:
-# TODO: Put in ReadMe.md (change str to smaller case - add Enum)
+# TODO: Put in ReadMe.md
 class CameraModel(str, Enum):
     """Camera model type constants."""
-    REGULAR = "regular"  # Regular (OpenCV Regular camera)
-    BROWN = "brown"      # Brown–Conrady (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration)
-    FISHEYE = "fisheye"  # Fisheye (OpenCV Fisheye camera)
-    KANNALA = "kannala"  # Kannala-Brandt (See: https://oulu3dvision.github.io/calibgeneric/Kannala_Brandt_calibration.pdf)
-    MEI = "mei"          # MEI (KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
+    BC = "bc"            # Brown–Conrady [OpenCV 2D camera] (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration#:~:text=.-,Brown%20Model,-The%20Brown%20camera)
+    KB = "kb"            # Kannala-Brandt - Symmetric [OpenCV Fisheye camera] (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration#:~:text=equations%20to%20Brown.-,Kannala%2DBrandt%20Model,-Kannala%2DBrandt%20%5B3)
+    MEI = "mei"          # MEI [Universal Omni Model] (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration#:~:text=the%20tangential%20coefficients.-,Universal%20Omni%20Model,-Universal%20Omni%20%5B2)
+                         # (Also used in KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
     CUSTOM0 = "custom0"  # Custom0
+
+
+class AnnotationOption(str, Enum):
+    """Annotation option type constants."""
+    CUBE = "cube"
+    POLYGONS = "polygons"
+    POINTS = "points"
 
 
 # ============================================================================
@@ -40,47 +46,14 @@ class CameraModelHandler:
     def __init__(self):
         """Initialize camera model function maps."""
         self.DISTORTION_FUNCTIONS = {
-            CameraModel.REGULAR: CameraModelHandler.apply_regular_distortion,
-            CameraModel.BROWN: CameraModelHandler.apply_brown_distortion,
-            CameraModel.FISHEYE: CameraModelHandler.apply_fisheye_distortion,
-            CameraModel.KANNALA: CameraModelHandler.apply_kannala_distortion,
+            CameraModel.BC: CameraModelHandler.apply_brown_conrady_distortion,
+            CameraModel.KB: CameraModelHandler.apply_kannala_brandt_distortion,
             CameraModel.MEI: CameraModelHandler.apply_mei_distortion,
             CameraModel.CUSTOM0: CameraModelHandler.apply_custom0_distortion,
         }
     
     @staticmethod
-    def apply_regular_distortion(x, y, z, **kwargs):
-        """Apply Regular camera model distortion to a point."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        k3 = kwargs.get('k3', 0.0)
-        p1 = kwargs.get('p1', 0.0)
-        p2 = kwargs.get('p2', 0.0)
-        
-        z = z if z != 0 else 1e-8
-        x = x / z
-        y = y / z
-        
-        # r = math.sqrt(x * x + y * y)
-        r2 = x * x + y * y
-        
-        radial_sum = 1.0
-        for idx, ki in enumerate([k1, k2, k3]):
-            if ki != 0.0:
-                radial_sum += ki * r2 ** (idx + 1)
-        
-        x_r = x * radial_sum
-        y_r = y * radial_sum
-        
-        x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
-        y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
-        
-        x_d = x_r + x_t
-        y_d = y_r + y_t
-        return x_d, y_d
-    
-    @staticmethod
-    def apply_brown_distortion(x, y, z, **kwargs):
+    def apply_brown_conrady_distortion(x, y, z, **kwargs):
         """Apply Brown-Conrady camera model distortion."""
         k1 = kwargs.get('k1', 0.0)
         k2 = kwargs.get('k2', 0.0)
@@ -108,40 +81,18 @@ class CameraModelHandler:
         x_r = x * radial_sum
         y_r = y * radial_sum
         
-        x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
-        y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
-        
-        x_d = x_r + x_t
-        y_d = y_r + y_t
-        return x_d, y_d
+        if p1 != 0.0 and p2 != 0.0:
+            x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+            y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
+            x_d = x_r + x_t
+            y_d = y_r + y_t
+            return x_d, y_d
+        else:
+            return x_r, y_r
     
     @staticmethod
-    def apply_fisheye_distortion(x, y, z, **kwargs):
-        """Apply Fisheye camera model distortion."""
-        k1 = kwargs.get('k1', 0.0)
-        k2 = kwargs.get('k2', 0.0)
-        k3 = kwargs.get('k3', 0.0)
-        k4 = kwargs.get('k4', 0.0)
-        
-        r = math.sqrt(x * x + y * y)
-        theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
-        theta2 = theta * theta
-        
-        radial_sum = 1.0
-        for idx, ki in enumerate([k1, k2, k3, k4]):
-            if ki != 0.0:
-                radial_sum += ki * theta2 ** (idx + 1)
-        
-        radial = theta * radial_sum
-        scale = radial / r if r > 1e-8 else 1.0
-
-        x_d = x * scale
-        y_d = y * scale
-        return x_d, y_d
-    
-    @staticmethod
-    def apply_kannala_distortion(x, y, z, **kwargs):
-        """Apply Kannala-Brandt camera model distortion."""
+    def apply_kannala_brandt_distortion(x, y, z, **kwargs):
+        """Apply Kannala-Brandt (Symmetric) camera model distortion."""
         k1 = kwargs.get('k1', 0.0)
         k2 = kwargs.get('k2', 0.0)
         k3 = kwargs.get('k3', 0.0)
@@ -150,11 +101,13 @@ class CameraModelHandler:
         k6 = kwargs.get('k6', 0.0)
         k7 = kwargs.get('k7', 0.0)
         k8 = kwargs.get('k8', 0.0)
-        p1 = kwargs.get('p1', None)
-        p2 = kwargs.get('p2', None)
         
+        z = z if z != 0 else 1e-8
+        x = x / z
+        y = y / z
+
         r = math.sqrt(x * x + y * y)
-        theta = np.arccos(z / math.sqrt(x * x + y * y + z * z))
+        theta = math.atan(r)
         theta2 = theta * theta
         
         radial_sum = 1.0
@@ -167,21 +120,15 @@ class CameraModelHandler:
         x_r = x * scale
         y_r = y * scale
         
-        if p1 is not None and p2 is not None:
-            r2 = x_r * x_r + y_r * y_r
-            x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-            y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
-            return x_d, y_d
-        else:
-            return x_r, y_r
+        return x_r, y_r
     
     @staticmethod
     def apply_mei_distortion(x, y, z, **kwargs):
         """Apply MEI camera model distortion."""
         k1 = kwargs.get('k1', 0.0)
         k2 = kwargs.get('k2', 0.0)
-        p1 = kwargs.get('p1', None)
-        p2 = kwargs.get('p2', None)
+        p1 = kwargs.get('p1', 0.0)
+        p2 = kwargs.get('p2', 0.0)
         xi = kwargs.get('xi', 0.0)
         
         norm = float(np.linalg.norm(np.array([x, y, z])))
@@ -202,9 +149,11 @@ class CameraModelHandler:
         x_r = x * radial_sum
         y_r = y * radial_sum
         
-        if p1 is not None and p2 is not None:
-            x_d = x_r + (2.0 * p1 * x_r * y_r + p2 * (r2 + 2.0 * x_r * x_r))
-            y_d = y_r + (p1 * (r2 + 2.0 * y_r * y_r) + 2.0 * p2 * x_r * y_r)
+        if p1 != 0.0 and p2 != 0.0:
+            x_t = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+            y_t = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
+            x_d = x_r + x_t
+            y_d = y_r + y_t
             return x_d, y_d
         else:
             return x_r, y_r
@@ -248,25 +197,6 @@ class CameraModelHandler:
         x_d = x_r + (2.0 * p1 * xu * yu + p2 * (ru2 + 2.0 * xu * xu))
         y_d = y_r + (p1 * (ru2 + 2.0 * yu * yu) + 2.0 * p2 * xu * yu)
         return x_d, y_d
-    
-    @staticmethod
-    def create_undistortion_map_custom0(h, w, fx, fy, cx, cy, skew, **kwargs):
-        """Create undistortion map for Custom0 camera model."""
-        map_x = np.zeros((h, w), dtype=np.float32)
-        map_y = np.zeros((h, w), dtype=np.float32)
-        
-        for j in range(h):
-            for i in range(w):
-                z = 1.0
-                y = (j - cy) / fy
-                x = (i - cx - skew * y) / fx
-                
-                x_d, y_d = CameraModelHandler.apply_custom0_distortion(x=x, y=y, z=z, **kwargs)
-                
-                map_x[j, i] = fx * x_d + skew * y_d + cx
-                map_y[j, i] = fy * y_d + cy
-        
-        return map_x, map_y
     
     def apply_distortion_to_point(self, x, y, z, camera_distortion):
         """Apply distortion to a single point based on camera model."""
@@ -422,7 +352,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
     def create_annotation(self, option, label, points_3d, annotation_pixels, width, height, full_annotations_only):
         """
         Create annotation from 3D cube 8 points projected on 2D image.
-        :param option: annotation type, can be "Cube", "Polygons", or "Points".
+        :param option: annotation type, from AnnotationOption enum.
         :param label: annotation label
         :param points_3d: 3D cube points in camera space (PCD normalized).
         :param annotation_pixels: annotation 3D cube 8 points projected on 2D image.
@@ -460,7 +390,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         back_bl = back["bl"]
 
         # TODO: Open ticket Feature Request - Bend Cuboid
-        if option == "Cube":
+        if option == AnnotationOption.CUBE:
             cube = dl.Cube(
                 label=label,
                 front_tl=front_tl,
@@ -475,7 +405,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             cubes = [cube]
             return cubes
 
-        elif option == "Polygons":
+        elif option == AnnotationOption.POLYGONS:
             # Option 1 - Front & Back Polygons
             # polygon1 = dl.Polygon(
             #     geo=[
@@ -507,7 +437,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             polygons = [polygon]
             return polygons
 
-        elif option == "Points":
+        elif option == AnnotationOption.POINTS:
             points = [
                 dl.Point(x=front_tl[0], y=front_tl[1], label=label),  # front top left
                 dl.Point(x=front_tr[0], y=front_tr[1], label=label),  # front top right
@@ -521,7 +451,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             return points
 
         else:
-            raise ValueError(f"Unsupported option: {option}. Supported options are 'Cube', 'Polygons', and 'Points'.")
+            raise ValueError(f"Unsupported option: {option}. Supported options are {list(AnnotationOption)}.")
 
     def handle_frame(self, items_path, labels_colors, cameras_map, frame_images, frame_annotations, flags):
         """
@@ -538,7 +468,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         # Parse flags
         # TODO: Replace as reading from Context and add example
         full_annotations_only = flags.get("full_annotations_only", False)
-        project_remotely = flags.get("project_remotely", True)
+        debug = flags.get("debug", False)
         apply_image_undistortion = flags.get("apply_image_undistortion", False)
         apply_annotation_distortion = flags.get("apply_annotation_distortion", True)
 
@@ -603,14 +533,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
             # Default Camera Model
             if "model" not in camera_distortion:
-                camera_distortion["model"] = CameraModel.REGULAR
+                camera_distortion["model"] = CameraModel.BC
                 # camera_distortion["model"] = CameraModel.CUSTOM0
             else:
                 camera_model = camera_distortion["model"]
                 if camera_model not in list(CameraModel):
                     raise ValueError(
                         f"Unsupported camera model: {camera_model}. "
-                        f"Supported models are: {CameraModel.REGULAR} and {CameraModel.CUSTOM0}."
+                        f"Supported models are: {list(CameraModel)}."
                     )
 
             ################
@@ -618,11 +548,11 @@ class AnnotationProjection(dl.BaseServiceRunner):
             ################
 
             # TODO: Replace name to Debug + make both functionality work togther.
-            if project_remotely is True:
+            if debug is False:
                 # No undistortion support for remote image
                 images_map[item_id]["path"] = None
 
-            elif project_remotely is False:
+            else:
                 # Set image paths
                 image_path = str(os.path.join(items_path, item.filename[1:]))
                 img_name, img_ext = os.path.splitext(image_path)
@@ -684,7 +614,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         p2 = camera_distortion.get("p2", 0.0)
 
                         # Distortion coefficients
-                        if camera_model == CameraModel.REGULAR:
+                        if camera_model == CameraModel.BC:
                             D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
 
                             # Original distorted image
@@ -705,6 +635,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             undistorted = cv2.undistort(image, K, D, None, new_K)
                             x, y, w, h = roi
                             undistorted = undistorted[y:y + h, x:x + w]
+                        elif camera_model == CameraModel.KB:
+                            # TODO: Implement Kannala-Brandt (Symmetric) OpenCV undistortion
+                            raise NotImplementedError
                         else:
                             raise ValueError(
                                 f"[OpenCV] Unsupported camera model: {camera_model}. "
@@ -730,9 +663,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     "path": image_path,
                     "output_path": output_image_path
                 }
-
-            else:
-                raise ValueError("project_remotely must be either True or False.")
 
             ##########################
             # Apply MVP + Distortion #
@@ -820,16 +750,16 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                     if apply_annotation_distortion:
                         # 2D camera #
-                        if camera_model == CameraModel.REGULAR:
+                        if camera_model == CameraModel.BC:
                             D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
                             (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
-                        elif camera_model == CameraModel.FISHEYE:
+                        elif camera_model == CameraModel.KB:
                             D = np.array([k1, k2, k3, k4], dtype=np.float64)
                             (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
                         else:
                             raise ValueError(
                                 f"[OpenCV] Unsupported camera model: {camera_model}.\n"
-                                f"Supported models are: {CameraModel.REGULAR} and {CameraModel.FISHEYE}."
+                                f"Supported models are: {CameraModel.BC} and {CameraModel.KB}."
                             )
                     else:
                         D = np.zeros((5,), dtype=np.float64)
@@ -845,13 +775,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     )
 
                 # Select annotation option based on the projection mode
-                if project_remotely:
+                if debug is False:
                     if apply_annotation_distortion:
-                        option = "Polygons"
+                        option = AnnotationOption.POLYGONS
                     else:
-                        option = "Cube"
+                        option = AnnotationOption.CUBE
                 else:
-                    option = "Points"
+                    option = AnnotationOption.POINTS
 
                 # create annotation if it is inside the image boundaries
                 annotation_definitions = self.create_annotation(
@@ -867,7 +797,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                 if annotation_definitions is None:
                     continue
 
-                if project_remotely is True:
+                if debug is False:
                     # Add annotation to the item builder
                     for annotation_definition in annotation_definitions:
                         images_map[item_id]["builder"].add(
@@ -897,7 +827,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     cv2.imwrite(image_path, image)
 
         # Upload annotation to the item
-        if project_remotely is True:
+        if debug is False:
             for item_id in images_map.keys():
                 images_map[item_id]["builder"].upload()
 
@@ -969,8 +899,13 @@ class AnnotationProjection(dl.BaseServiceRunner):
         - project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
         - apply_image_undistortion: if True, apply image undistortion to the images before projection
         - apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
+        - start_frame: if provided, only annotations from the start frame will be projected to 2D
+        - end_frame: if provided, only annotations until the end frame will be projected to 2D (exclusive)
         :return: None
         """
+        start_frame = flags.get("start_frame", 0)
+        end_frame = flags.get("end_frame", None)
+
         # Get labels colors
         def hex_to_bgr(hex_color: str):
             hex_color = hex_color.lstrip('#')
@@ -1007,26 +942,25 @@ class AnnotationProjection(dl.BaseServiceRunner):
         camera_calibrations = lidar_video_content.get('cameras', list())
         cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
         frames_count = len(lidar_video_content.get('frames', list()))
+        if end_frame is None:
+            end_frame = frames_count
         for frame_num in range(frames_count):
             print("Frame number:", frame_num)
-
-            # TODO: Debug
-            if frame_num != 0:
-                continue
 
             #################
             # Handle Images #
             #################
-            frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
-            frame_annotations = frame_annotations_per_frame.get(frame_num, list())
-            self.handle_frame(
-                items_path=items_path,
-                labels_colors=labels_colors,
-                cameras_map=cameras_map,
-                frame_images=frame_images,
-                frame_annotations=frame_annotations,
-                flags=flags
-            )
+            if start_frame <= frame_num < end_frame:
+                frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
+                frame_annotations = frame_annotations_per_frame.get(frame_num, list())
+                self.handle_frame(
+                    items_path=items_path,
+                    labels_colors=labels_colors,
+                    cameras_map=cameras_map,
+                    frame_images=frame_images,
+                    frame_annotations=frame_annotations,
+                    flags=flags
+                )
 
 
 if __name__ == "__main__":
@@ -1036,9 +970,11 @@ if __name__ == "__main__":
     # frames_item.open_in_web()
     flags = dict(
         full_annotations_only=False,
-        project_remotely=False,
+        debug=True,
         apply_image_undistortion=False,
         apply_annotation_distortion=True,
+        start_frame=0,
+        end_frame=1,
     )
 
     runner = AnnotationProjection()
