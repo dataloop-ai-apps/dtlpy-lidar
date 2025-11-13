@@ -653,10 +653,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         elif camera_model == CameraModel.KB:
                             D = np.array([k1, k2, k3, k4], dtype=np.float64)
 
-                            Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                                K=K, D=D, image_size=(w, h), R=np.eye(3), P=None, balance=0.0, new_size=(w, h), fov_scale=1.0
+                            Knew = K
+                            undistorted = cv2.fisheye.undistortImage(
+                                distorted=image, K=K, D=D, undistorted=None, Knew=Knew, new_size=(w, h)
                             )
-                            undistorted = cv2.fisheye.undistortImage(image, K, D, None, Knew, (w, h))
                         elif camera_model == CameraModel.MEI:
                             D = np.array([k1, k2, k3, k4], dtype=np.float64)
 
