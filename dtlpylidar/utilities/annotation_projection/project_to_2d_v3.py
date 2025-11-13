@@ -638,31 +638,18 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         # Distortion coefficients
                         if camera_model == CameraModel.BC:
                             D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-
-                            # Compute optimal rectified camera matrix (keeps FOV)
-                            new_K, roi = cv2.getOptimalNewCameraMatrix(
-                                cameraMatrix=K, distCoeffs=D, imageSize=(w, h), alpha=1, newImgSize=(w, h)
-                            )
-
-                            # Undistort
                             undistorted = cv2.undistort(
-                                src=image, cameraMatrix=K, distCoeffs=D, dst=None, newCameraMatrix=new_K
+                                src=image, cameraMatrix=K, distCoeffs=D, dst=None, newCameraMatrix=K
                             )
-                            x, y, w, h = roi
-                            undistorted = undistorted[y:y + h, x:x + w]
                         elif camera_model == CameraModel.KB:
                             D = np.array([k1, k2, k3, k4], dtype=np.float64)
-
-                            Knew = K
                             undistorted = cv2.fisheye.undistortImage(
-                                distorted=image, K=K, D=D, undistorted=None, Knew=Knew, new_size=(w, h)
+                                distorted=image, K=K, D=D, undistorted=None, Knew=cv2.KAZE_DIFF_CHARBONNIER, new_size=(w, h)
                             )
                         elif camera_model == CameraModel.MEI:
                             D = np.array([k1, k2, k3, k4], dtype=np.float64)
-
-                            Knew = K
                             undistorted = cv2.omnidir.undistortImage(
-                                distorted=image, K=K, D=D, xi=xi, flags=cv2.omnidir.RECTIFY_PERSPECTIVE, undistorted=None, Knew=Knew, new_size=(w, h), R=None
+                                distorted=image, K=K, D=D, xi=xi, flags=cv2.omnidir.RECTIFY_PERSPECTIVE, undistorted=None, Knew=K, new_size=(w, h), R=None
                             )
                         else:
                             raise ValueError(
