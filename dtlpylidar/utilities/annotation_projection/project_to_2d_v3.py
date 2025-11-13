@@ -1002,16 +1002,20 @@ if __name__ == "__main__":
 
     # Create context
     context = dl.Context()
-    context.node = dl.entities.node.PipelineNode(
-        metadata=dict(
-            customNodeConfig=dict(
-            full_annotations_only=False,
-            debug=True,
-            apply_image_undistortion=False,
-            apply_annotation_distortion=True,
-            start_frame=0,
-            end_frame=1,
-            )
+    context._node = dl.entities.node.CodeNode(
+        name="AnnotationProjection",
+        project_id=None,
+        project_name=None,
+        method=lambda x: x,
+    )
+    context.node.metadata = dict(
+        customNodeConfig=dict(
+        full_annotations_only=False,
+        debug=True,
+        apply_image_undistortion=False,
+        apply_annotation_distortion=True,
+        start_frame=0,
+        end_frame=1,
         )
     )
 
