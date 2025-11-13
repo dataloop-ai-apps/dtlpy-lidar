@@ -3,4 +3,3 @@ scipy
 numpy
 open3d
 pandas
-opencv-contrib-python

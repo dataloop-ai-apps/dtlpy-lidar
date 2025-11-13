@@ -541,6 +541,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         f"Unsupported camera model: {camera_model}. "
                         f"Supported models are: {list(CameraModel)}."
                     )
+                
+                if camera_model == CameraModel.MEI and (undistort_mode == "OpenCV" or projection_mode == "OpenCV"):
+                    try:
+                        import cv2.omnidir
+                    except ImportError:
+                        raise ImportError(
+                            "cv2.omnidir is not installed. Please install it using 'pip install opencv-contrib-python'."
+                        )
 
             ################
             # Undistortion #
