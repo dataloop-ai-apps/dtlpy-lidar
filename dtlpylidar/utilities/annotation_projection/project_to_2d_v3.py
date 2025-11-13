@@ -22,7 +22,7 @@ class CameraModel(str, Enum):
     BC = "bc"            # Brown–Conrady [OpenCV 2D camera] (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration#:~:text=.-,Brown%20Model,-The%20Brown%20camera)
     KB = "kb"            # Kannala-Brandt - Symmetric [OpenCV Fisheye camera] (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration#:~:text=equations%20to%20Brown.-,Kannala%2DBrandt%20Model,-Kannala%2DBrandt%20%5B3)
     MEI = "mei"          # MEI [Universal Omni Model] (See: https://boofcv.org/index.php?title=Tutorial_Camera_Calibration#:~:text=the%20tangential%20coefficients.-,Universal%20Omni%20Model,-Universal%20Omni%20%5B2)
-                         # (Also used in KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
+                         # (Example: KITTI-360 Fisheye cameras: https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/helpers/project.py)
     CUSTOM0 = "custom0"  # Custom0
 
 
@@ -453,7 +453,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
         else:
             raise ValueError(f"Unsupported option: {option}. Supported options are {list(AnnotationOption)}.")
 
-    def handle_frame(self, items_path, labels_colors, cameras_map, frame_images, frame_annotations, flags):
+    def handle_frame(self, items_path, labels_colors, cameras_map, frame_images, frame_annotations, config):
         """
         Calculate frame annotations.
         Iterate over images that correspond with frame and create cube annotation for each image if it is inside the image boundaries.
@@ -462,15 +462,14 @@ class AnnotationProjection(dl.BaseServiceRunner):
         :param cameras_map: map of camera IDs to camera calibrations
         :param frame_images: images that correspond with the current frame number
         :param frame_annotations: annotations that correspond with the current frame number
-        :param flags: flags for the projection
+        :param config: config for the projection
         :return: None
         """
-        # Parse flags
-        # TODO: Replace as reading from Context and add example
-        full_annotations_only = flags.get("full_annotations_only", False)
-        debug = flags.get("debug", False)
-        apply_image_undistortion = flags.get("apply_image_undistortion", False)
-        apply_annotation_distortion = flags.get("apply_annotation_distortion", True)
+        # Parse config
+        full_annotations_only = config.get("full_annotations_only", False)
+        debug = config.get("debug", False)
+        apply_image_undistortion = config.get("apply_image_undistortion", False)
+        apply_annotation_distortion = config.get("apply_annotation_distortion", True)
 
         # Debug flags:
         # "Manual"
@@ -612,36 +611,52 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         k4 = camera_distortion.get("k4", 0.0)
                         p1 = camera_distortion.get("p1", 0.0)
                         p2 = camera_distortion.get("p2", 0.0)
+                        xi = camera_distortion.get("xi", 0.0)
+
+                        # Original distorted image
+                        image = cv2.imread(image_path)
+                        h, w = image.shape[:2]
+
+                        # Build K matrix for OpenCV
+                        K = np.array([
+                            [fx, skew, cx],
+                            [0, fy, cy],
+                            [0, 0, 1]
+                        ])
 
                         # Distortion coefficients
                         if camera_model == CameraModel.BC:
                             D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
 
-                            # Original distorted image
-                            image = cv2.imread(image_path)
-                            h, w = image.shape[:2]
-
-                            # Build K matrix for OpenCV
-                            K = np.array([
-                                [fx, skew, cx],
-                                [0, fy, cy],
-                                [0, 0, 1]
-                            ])
-
                             # Compute optimal rectified camera matrix (keeps FOV)
-                            new_K, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w, h))
+                            new_K, roi = cv2.getOptimalNewCameraMatrix(
+                                cameraMatrix=K, distCoeffs=D, imageSize=(w, h), alpha=1, newImgSize=(w, h)
+                            )
 
                             # Undistort
-                            undistorted = cv2.undistort(image, K, D, None, new_K)
+                            undistorted = cv2.undistort(
+                                src=image, cameraMatrix=K, distCoeffs=D, dst=None, newCameraMatrix=new_K
+                            )
                             x, y, w, h = roi
                             undistorted = undistorted[y:y + h, x:x + w]
                         elif camera_model == CameraModel.KB:
-                            # TODO: Implement Kannala-Brandt (Symmetric) OpenCV undistortion
-                            raise NotImplementedError
+                            D = np.array([k1, k2, k3, k4], dtype=np.float64)
+
+                            Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+                                K=K, D=D, image_size=(w, h), R=np.eye(3), P=None, balance=0.0, new_size=(w, h), fov_scale=1.0
+                            )
+                            undistorted = cv2.fisheye.undistortImage(image, K, D, None, Knew, (w, h))
+                        elif camera_model == CameraModel.MEI:
+                            D = np.array([k1, k2, k3, k4], dtype=np.float64)
+
+                            Knew = K
+                            undistorted = cv2.omnidir.undistortImage(
+                                distorted=image, K=K, D=D, xi=xi, flags=cv2.omnidir.RECTIFY_PERSPECTIVE, undistorted=None, Knew=Knew, new_size=(w, h), R=None
+                            )
                         else:
                             raise ValueError(
                                 f"[OpenCV] Unsupported camera model: {camera_model}. "
-                                f"Supported models are: {CameraModel.REGULAR}."
+                                f"Supported models are: {CameraModel.BC} and {CameraModel.KB}."
                             )
 
                     else:
@@ -724,6 +739,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     k4 = camera_distortion.get("k4", 0.0)
                     p1 = camera_distortion.get("p1", 0.0)
                     p2 = camera_distortion.get("p2", 0.0)
+                    xi = camera_distortion.get("xi", 0.0)
 
                     mv = view_matrix @ model_matrix  # Model View matrix
                     K = projection_matrix[:3, :3]  # Projection matrix
@@ -756,6 +772,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
                         elif camera_model == CameraModel.KB:
                             D = np.array([k1, k2, k3, k4], dtype=np.float64)
                             (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+                        elif camera_model == CameraModel.MEI:
+                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                            (points_2d, _) = cv2.omnidir.projectPoints(object_points, rvec, tvec, K, xi, D)
                         else:
                             raise ValueError(
                                 f"[OpenCV] Unsupported camera model: {camera_model}.\n"
@@ -890,21 +909,26 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         return frame_annotations_per_frame
 
-    def project_annotations_to_2d(self, item: dl.Item, flags: dict):
+    def project_annotations_to_2d(self, item: dl.Item, context: dl.Context = None):
         """
         Function that projects annotations to 2D from the original lidar scene annotations.
         :param item: DL lidar scene item
-        :param flags: dictionary with flags:
+        :param context: context object with custom node configuration:
         - full_annotations_only: if True, only full annotations will be projected to 2D
-        - project_remotely: if True, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
+        - debug: if False, annotations will be uploaded to the image items, otherwise annotations will be drawn on the images locally.
         - apply_image_undistortion: if True, apply image undistortion to the images before projection
         - apply_annotation_distortion: if True, apply annotation distortion to the projected pixels
         - start_frame: if provided, only annotations from the start frame will be projected to 2D
         - end_frame: if provided, only annotations until the end frame will be projected to 2D (exclusive)
         :return: None
         """
-        start_frame = flags.get("start_frame", 0)
-        end_frame = flags.get("end_frame", None)
+        if context is not None and context.node is not None:
+            config = context.node.metadata.get("customNodeConfig", dict())
+        else:
+            config = dict()
+        
+        start_frame = config.get("start_frame", 0)
+        end_frame = config.get("end_frame", -1)  # -1 means all frames
 
         # Get labels colors
         def hex_to_bgr(hex_color: str):
@@ -942,43 +966,49 @@ class AnnotationProjection(dl.BaseServiceRunner):
         camera_calibrations = lidar_video_content.get('cameras', list())
         cameras_map = {camera.get('id'): camera for camera in camera_calibrations}
         frames_count = len(lidar_video_content.get('frames', list()))
-        if end_frame is None:
+        if end_frame == -1:
             end_frame = frames_count
-        for frame_num in range(frames_count):
+        for frame_num in range(start_frame, end_frame):
             print("Frame number:", frame_num)
 
             #################
             # Handle Images #
             #################
-            if start_frame <= frame_num < end_frame:
-                frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
-                frame_annotations = frame_annotations_per_frame.get(frame_num, list())
-                self.handle_frame(
-                    items_path=items_path,
-                    labels_colors=labels_colors,
-                    cameras_map=cameras_map,
-                    frame_images=frame_images,
-                    frame_annotations=frame_annotations,
-                    flags=flags
-                )
+            frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
+            frame_annotations = frame_annotations_per_frame.get(frame_num, list())
+            self.handle_frame(
+                items_path=items_path,
+                labels_colors=labels_colors,
+                cameras_map=cameras_map,
+                frame_images=frame_images,
+                frame_annotations=frame_annotations,
+                config=config
+            )
 
 
 if __name__ == "__main__":
     # frames json item ID
-    item_id = 'XXXX'
+    item_id = '686699883d66eb96ffd891fa'
     frames_item = dl.items.get(item_id=item_id)
     # frames_item.open_in_web()
-    flags = dict(
-        full_annotations_only=False,
-        debug=True,
-        apply_image_undistortion=False,
-        apply_annotation_distortion=True,
-        start_frame=0,
-        end_frame=1,
+
+    # Create context
+    context = dl.Context()
+    context.node = dl.entities.node.PipelineNode(
+        metadata=dict(
+            customNodeConfig=dict(
+            full_annotations_only=False,
+            debug=True,
+            apply_image_undistortion=False,
+            apply_annotation_distortion=True,
+            start_frame=0,
+            end_frame=1,
+            )
+        )
     )
 
     runner = AnnotationProjection()
     runner.project_annotations_to_2d(
         item=frames_item,
-        flags=flags
+        context=context
     )
