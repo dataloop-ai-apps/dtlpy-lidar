@@ -573,6 +573,9 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
                 # Remove distortion from image
                 if apply_image_undistortion:
+                    # TODO: Check why this import is required (without it cv2 is not defined)
+                    import cv2
+
                     # Manual Undistortion
                     if undistort_mode == "Manual":
                         h, w = item.height, item.width
@@ -677,8 +680,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     cv2.imwrite(output_image_path, undistorted)
 
                 else:
-                    # TODO: Check why this import is required (without it cv2 is not defined)
-                    import cv2
                     # Overwrite annotated image
                     image = cv2.imread(image_path)
                     cv2.imwrite(output_image_path, image)
