@@ -1,10 +1,10 @@
+import cv2
 import dtlpy as dl
 import os
 import numpy as np
 import json
 import dtlpylidar.utilities.transformations as transformations
 from tqdm import tqdm
-import cv2
 import math
 from scipy.ndimage import map_coordinates
 from enum import Enum
@@ -677,6 +677,8 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     cv2.imwrite(output_image_path, undistorted)
 
                 else:
+                    # TODO: Check why this import is required (without it cv2 is not defined)
+                    import cv2
                     # Overwrite annotated image
                     image = cv2.imread(image_path)
                     cv2.imwrite(output_image_path, image)
@@ -781,7 +783,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
                             D = np.array([k1, k2, k3, k4], dtype=np.float64)
                             (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
                         elif camera_model == CameraModel.MEI:
-                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+                            D = np.array([k1, k2, p1, p2], dtype=np.float64)
                             (points_2d, _) = cv2.omnidir.projectPoints(object_points, rvec, tvec, K, xi, D)
                         else:
                             raise ValueError(
