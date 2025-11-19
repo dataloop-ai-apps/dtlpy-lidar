@@ -24,12 +24,8 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
         self.jsons_path = ""
 
     def download_mapping_items(self, mapping_item, items_download_path, filters=None):
-        if filters is not None:
-            self.dataset.download_annotations(
-                local_path=items_download_path,
-                filters=filters
-            )
-        else:  # By default, download only the jsons of the items specified in the mapping data
+        # By default, download only the jsons of the items specified in the mapping data
+        if filters is None:
             item_filenames = []
             frames = self.mapping_data.get("frames", dict())
             for frame_num, frame_details in frames.items():
@@ -49,10 +45,11 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
 
             filters = dl.Filters()
             filters.add(field=dl.FiltersKnownFields.FILENAME, values=item_filenames, operator=dl.FiltersOperations.IN)
-            self.dataset.download_annotations(
-                local_path=items_download_path,
-                filters=filters
-            )
+        
+        self.dataset.download_annotations(
+            local_path=items_download_path,
+            filters=filters
+        )
 
     def parse_lidar_data(self, mapping_item: dl.Item) -> dl.Item:
         scene = lidar_scene.LidarScene()
@@ -169,7 +166,11 @@ class LidarFileMappingParser(dl.BaseServiceRunner):
     def parse_data(self, mapping_item: dl.Item, query: dict = None) -> dl.Item:
         if "json" not in mapping_item.metadata.get("system", dict()).get("mimetype"):
             raise Exception("Expected item of type json")
-        filters = dl.Filters(custom_filter=query)
+        
+        if query is None:
+            filters = None
+        else:
+            filters = dl.Filters(custom_filter=query)
 
         buffer = mapping_item.download(save_locally=False)
         self.mapping_data = json.loads(buffer.getvalue())
