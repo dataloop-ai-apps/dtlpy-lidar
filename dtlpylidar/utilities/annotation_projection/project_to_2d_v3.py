@@ -8,6 +8,7 @@ from tqdm import tqdm
 import math
 from scipy.ndimage import map_coordinates
 from enum import Enum
+from typing import Union
 # import uuid
 
 
@@ -34,22 +35,91 @@ class AnnotationOption(str, Enum):
 
 
 # ============================================================================
+# MVP CALCULATOR
+# ============================================================================
+
+class MVPCalculator:
+    """Handles Model-View-Projection matrix calculations."""
+    
+    @staticmethod
+    def calculate_view_matrix(extrinsic_data: dict) -> np.ndarray:
+        """Calculate view matrix from camera pose."""
+        camera_rotation = extrinsic_data.get('rotation')
+        camera_rotation = [
+            camera_rotation.get('x', 0.0),
+            camera_rotation.get('y', 0.0),
+            camera_rotation.get('z', 0.0),
+            camera_rotation.get('w', 1.0)
+        ]
+        camera_translation = extrinsic_data.get('position')
+        camera_translation = [
+            camera_translation.get('x', 0.0),
+            camera_translation.get('y', 0.0),
+            camera_translation.get('z', 0.0)
+        ]
+        view_matrix = transformations.calc_transform_matrix(
+            rotation=camera_rotation,
+            position=camera_translation
+        )
+        return np.linalg.inv(view_matrix)
+    
+    @staticmethod
+    def calculate_projection_matrix(intrinsic_data: dict) -> np.ndarray:
+        """Calculate projection matrix from intrinsic parameters."""
+        fx = intrinsic_data.get('fx', 1.0)
+        fy = intrinsic_data.get('fy', 1.0)
+        cx = intrinsic_data.get('cx', 0.0)
+        cy = intrinsic_data.get('cy', 0.0)
+        skew = intrinsic_data.get('skew', 0.0)
+        return np.array([
+            [fx, skew, cx, 0],
+            [0,  fy,   cy, 0],
+            [0,  0,    1,  0],
+            [0,  0,    0,  1]
+        ])
+    
+    def caluculate_world_space_points(self, mv_matrix: np.ndarray, points: np.ndarray) -> Union[None, np.ndarray]:
+        # Model + View
+        points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+        points_4d = (mv_matrix @ points_homogeneous.T).T  # (N, 4)
+        points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+
+        # Check if the points are behind the camera
+        if not np.all(points_3d[:, 2] > 0):
+            return None  # Return None if any point is behind the camera
+
+        return points_3d
+
+    def defualt_annotation_projection(self, p_matrix: np.ndarray, points_3d: np.ndarray) -> np.ndarray:
+        # Default Projection
+        annotation_pixels = []
+        for point_3d in points_3d:
+            (x, y, z) = point_3d
+            x_d = x / z
+            y_d = y / z
+            # Convert back to pixel coordinates
+            mv_points = np.array([x_d, y_d, 1, 1])
+            mvp_points = p_matrix @ mv_points
+            annotation_pixels.append(mvp_points[:2])
+
+        annotation_pixels = np.array(annotation_pixels)
+        return annotation_pixels
+
+# ============================================================================
 # CAMERA MODEL HANDLER - Eliminates Code Duplication
 # ============================================================================
 
-class CameraModelHandler:
+class CustomCameraModelHandler(MVPCalculator):
     """
-    Centralized camera model distortion and undistortion logic.
-    This eliminates ~600 lines of duplicated code.
+    Custom camera model distortion and undistortion logic.
     """
-    
     def __init__(self):
         """Initialize camera model function maps."""
         self.DISTORTION_FUNCTIONS = {
-            CameraModel.BC: CameraModelHandler.apply_brown_conrady_distortion,
-            CameraModel.KB: CameraModelHandler.apply_kannala_brandt_distortion,
-            CameraModel.MEI: CameraModelHandler.apply_mei_distortion,
-            CameraModel.CUSTOM0: CameraModelHandler.apply_custom0_distortion,
+            CameraModel.BC: self.apply_brown_conrady_distortion,
+            CameraModel.KB: self.apply_kannala_brandt_distortion,
+            CameraModel.MEI: self.apply_mei_distortion,
+            CameraModel.CUSTOM0: self.apply_custom0_distortion,
         }
     
     @staticmethod
@@ -205,32 +275,234 @@ class CameraModelHandler:
         )
         return x_d, y_d
 
+    def annotation_distortion(self, mv_matrix: np.ndarray, p_matrix: np.ndarray, points: np.ndarray, points_3d: np.ndarray, camera_distortion: dict) -> Union[None, np.ndarray]:
+        # NOTE: using world space points (3D points after model view transformation)
+        # Distortion
+        annotation_pixels = []
+        for point_3d in points_3d:
+            (x, y, z) = point_3d
+            x_d, y_d = self.apply_distortion_to_point(
+                x=x, y=y, z=z, camera_distortion=camera_distortion
+            )
+            # Projection
+            mv_points = np.array([x_d, y_d, 1, 1])
+            mvp_points = p_matrix @ mv_points
+            annotation_pixels.append(mvp_points[:2])
 
-# ============================================================================
-# MVP CALCULATOR
-# ============================================================================
+        annotation_pixels = np.array(annotation_pixels)
+        return annotation_pixels
 
-class MVPCalculator:
-    """Handles Model-View-Projection matrix calculations."""
+    def annotation_undistortion(self, image: np.ndarray, projection_matrix: np.ndarray, camera_distortion: dict):
+        """Apply undistortion to an image based on camera model."""
+        fx = projection_matrix[0, 0]
+        fy = projection_matrix[1, 1]
+        cx = projection_matrix[0, 2]
+        cy = projection_matrix[1, 2]
+        skew = projection_matrix[0, 1]
+
+        # Original distorted image
+        h, w = image.shape[:2]
     
-    @staticmethod
-    def calculate_view_matrix(camera_rotation, camera_translation):
-        """Calculate view matrix from camera pose."""
-        view_matrix = transformations.calc_transform_matrix(
-            rotation=camera_rotation,
-            position=camera_translation
+        map_x = np.zeros((h, w), dtype=np.float32)
+        map_y = np.zeros((h, w), dtype=np.float32)
+        for j in range(h):
+            for i in range(w):
+                z = 1.0
+                y = (j - cy) / fy
+                x = (i - cx - skew * y) / fx
+
+                x_d, y_d = self.apply_distortion_to_point(
+                    x=x, y=y, z=z, camera_distortion=camera_distortion
+                )
+                
+                map_x[j, i] = fx * x_d + skew * y_d + cx
+                map_y[j, i] = fy * y_d + cy
+
+        # Option 1: Using map_coordinates (slower)
+        # coords = [map_y.ravel(), map_x.ravel()]
+        # undistorted_r = map_coordinates(
+        #     image[:, :, 0], coords, order=1, mode='reflect').reshape((h, w))
+        # undistorted_g = map_coordinates(
+        #     image[:, :, 1], coords, order=1, mode='reflect').reshape((h, w))
+        # undistorted_b = map_coordinates(
+        #     image[:, :, 2], coords, order=1, mode='reflect').reshape((h, w))
+        # undistorted = np.stack(
+        #     [undistorted_r, undistorted_g, undistorted_b], axis=2).astype(np.uint8)
+
+        # Option 2: Using remap (faster)
+        undistorted = cv2.remap(
+            image, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT
         )
-        return np.linalg.inv(view_matrix)
+        return undistorted
+
+
+class OpenCVCameraModelHandler(MVPCalculator):
+    """
+    OpenCV camera model distortion and undistortion logic.
+    """
+    def __init__(self):
+        """Initialize camera model function maps."""
+        self.DISTORTION_FUNCTIONS = {
+            CameraModel.BC: self.apply_brown_conrady_distortion,
+            CameraModel.KB: self.apply_kannala_brandt_distortion,
+            CameraModel.MEI: self.apply_mei_distortion,
+        }
+        self.UNDISTORTION_FUNCTIONS = {
+            CameraModel.BC: self.apply_brown_conrady_undistortion,
+            CameraModel.KB: self.apply_kannala_brandt_undistortion,
+            CameraModel.MEI: self.apply_mei_undistortion,
+        }
+    
+    ########################
+    # Distortion Functions #
+    ########################
+
+    @staticmethod
+    def apply_brown_conrady_distortion(object_points, rvec, tvec, K, **kwargs):
+        """Apply Brown-Conrady camera model distortion."""
+        k1 = kwargs.get("k1", 0.0)
+        k2 = kwargs.get("k2", 0.0)
+        k3 = kwargs.get("k3", 0.0)
+        p1 = kwargs.get("p1", 0.0)
+        p2 = kwargs.get("p2", 0.0)
+
+        D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+        (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
+        return points_2d
     
     @staticmethod
-    def calculate_projection_matrix(fx, fy, cx, cy, skew):
-        """Calculate projection matrix from intrinsic parameters."""
-        return np.array([
-            [fx, skew, cx, 0],
-            [0,  fy,   cy, 0],
-            [0,  0,    1,  0],
-            [0,  0,    0,  1]
-        ])
+    def apply_kannala_brandt_distortion(object_points, rvec, tvec, K, **kwargs):
+        """Apply Kannala-Brandt (Symmetric) camera model distortion."""
+        k1 = kwargs.get("k1", 0.0)
+        k2 = kwargs.get("k2", 0.0)
+        k3 = kwargs.get("k3", 0.0)
+        k4 = kwargs.get("k4", 0.0)
+
+        D = np.array([k1, k2, k3, k4], dtype=np.float64)
+        try:
+            (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
+        except AttributeError:
+            raise ValueError(
+                f"[OpenCV] cv2.fisheye is not installed. Please install it using 'pip install opencv-contrib-python'."
+            )
+        return points_2d
+    
+    @staticmethod
+    def apply_mei_distortion(object_points, rvec, tvec, K, **kwargs):
+        """Apply MEI camera model distortion."""
+        k1 = kwargs.get("k1", 0.0)
+        k2 = kwargs.get("k2", 0.0)
+        p1 = kwargs.get("p1", 0.0)
+        p2 = kwargs.get("p2", 0.0)
+        xi = kwargs.get("xi", 0.0)
+
+        D = np.array([k1, k2, p1, p2], dtype=np.float64)
+        try:
+            (points_2d, _) = cv2.omnidir.projectPoints(object_points, rvec, tvec, K, xi, D)
+        except AttributeError:
+            raise ValueError(
+                f"[OpenCV] cv2.omnidir is not installed. Please install it using 'pip install opencv-contrib-python'."
+            )
+        return points_2d
+
+    def annotation_distortion(self, mv_matrix: np.ndarray, p_matrix: np.ndarray, points: np.ndarray, points_3d: np.ndarray, camera_distortion: dict) -> Union[None, np.ndarray]:
+        # NOTE: using object space points and using OpenCV to handle everything (3D points before model view transformation)
+        # Convert to OpenCV format
+        object_points = points.reshape(1, -1, 3)
+        rvec = cv2.Rodrigues(mv_matrix[:3, :3])[0].astype(np.float64)  # Rotation vector
+        tvec = mv_matrix[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
+
+        # Distortion + Projection
+        K = p_matrix[:3, :3]  # Projection matrix
+        
+        if camera_distortion["model"] not in self.DISTORTION_FUNCTIONS:
+            raise ValueError(
+                f"[OpenCV] Unsupported camera model: {camera_distortion['model']}.\n"
+                f"Supported models are: {list(self.DISTORTION_FUNCTIONS.keys())}."
+            )
+        points_2d = self.DISTORTION_FUNCTIONS[camera_distortion["model"]](
+            object_points=object_points, rvec=rvec, tvec=tvec, K=K, **camera_distortion
+        )
+        # points_2d: (N, 1, 2) - OpenCV format
+        annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
+        return annotation_pixels
+    
+    ##########################
+    # Undistortion Functions #
+    ##########################
+
+    def apply_brown_conrady_undistortion(self, image, K, camera_distortion):
+        """Apply Brown-Conrady camera model undistortion."""
+        k1 = camera_distortion.get("k1", 0.0)
+        k2 = camera_distortion.get("k2", 0.0)
+        k3 = camera_distortion.get("k3", 0.0)
+        p1 = camera_distortion.get("p1", 0.0)
+        p2 = camera_distortion.get("p2", 0.0)
+
+        D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+        undistorted = cv2.undistort(
+            src=image, cameraMatrix=K, distCoeffs=D, dst=None, newCameraMatrix=K
+        )
+        return undistorted
+    
+    def apply_kannala_brandt_undistortion(self, image, K, camera_distortion):
+        """Apply Kannala-Brandt (Symmetric) camera model undistortion."""
+        k1 = camera_distortion.get("k1", 0.0)
+        k2 = camera_distortion.get("k2", 0.0)
+        k3 = camera_distortion.get("k3", 0.0)
+        k4 = camera_distortion.get("k4", 0.0)
+        w = image.shape[1]
+        h = image.shape[0]
+
+        D = np.array([k1, k2, k3, k4], dtype=np.float64)
+        try:
+            undistorted = cv2.fisheye.undistortImage(
+                distorted=image, K=K, D=D, undistorted=None, Knew=cv2.KAZE_DIFF_CHARBONNIER, new_size=(w, h)
+            )
+        except AttributeError:
+            raise ValueError(
+                f"[OpenCV] cv2.fisheeye is not installed. Please install it using 'pip install opencv-contrib-python'."
+            )
+        return undistorted
+    
+    def apply_mei_undistortion(self, image, K, camera_distortion):
+        """Apply MEI camera model undistortion."""
+        k1 = camera_distortion.get("k1", 0.0)
+        k2 = camera_distortion.get("k2", 0.0)
+        k3 = camera_distortion.get("k3", 0.0)
+        k4 = camera_distortion.get("k4", 0.0)
+        xi = camera_distortion.get("xi", 0.0)
+        w = image.shape[1]
+        h = image.shape[0]
+
+        D = np.array([k1, k2, k3, k4], dtype=np.float64)
+        try:
+            undistorted = cv2.omnidir.undistortImage(
+                distorted=image, K=K, D=D, xi=xi, flags=cv2.omnidir.RECTIFY_PERSPECTIVE, undistorted=None, Knew=K, new_size=(w, h), R=None
+            )
+        except AttributeError:
+            raise ValueError(
+                f"[OpenCV] cv2.omnidir is not installed. Please install it using 'pip install opencv-contrib-python'."
+            )
+        return undistorted
+    
+    def annotation_undistortion(self, image: np.ndarray, projection_matrix: np.ndarray, camera_distortion: dict):
+        """Apply undistortion to an image based on camera model."""
+        camera_model = camera_distortion["model"]
+
+        # Build K matrix for OpenCV
+        K = projection_matrix[:3, :3]
+
+        # Undistortion
+        if camera_model not in self.UNDISTORTION_FUNCTIONS:
+            raise ValueError(
+                f"[OpenCV] Unsupported camera model: {camera_model}.\n"
+                f"Supported models are: {list(self.UNDISTORTION_FUNCTIONS.keys())}."
+            )
+        undistorted = self.UNDISTORTION_FUNCTIONS[camera_model](
+            image=image, K=K, camera_distortion=camera_distortion
+        )
+        return undistorted
 
 
 # ============================================================================
@@ -238,9 +510,18 @@ class MVPCalculator:
 # ============================================================================
 
 class AnnotationProjection(dl.BaseServiceRunner):
-    def __init__(self):
-        self.camera_model_handler = CameraModelHandler()
-        self.mvp_calculator = MVPCalculator()
+    def __init__(self, mode: str = "manual"):
+        # Debug flags:
+        # "Manual"
+        # "OpenCV" (Debug)
+        # TODO: Moving OpenCV usage to tests
+        if mode.lower() == "manual":
+            self.camera_model_handler = CustomCameraModelHandler()
+        elif mode.lower() == "opencv":
+            self.camera_model_handler = OpenCVCameraModelHandler()
+        else:
+            raise ValueError(f"Invalid mode: {mode}. Supported modes are: 'manual' and 'opencv'.")
+
         self.face_indices = {
             "front": [4, 5, 7, 6],  # Z = +1
             "back": [0, 1, 3, 2],   # Z = -1
@@ -257,6 +538,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
             "top": "bottom",
             "bottom": "top"
         }
+
+    ####################
+    # Ray Intersection #
+    ####################
 
     @staticmethod
     def intersect_ray_with_face(ray_origin, ray_dir, face_points):
@@ -348,6 +633,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
             "bl": tuple(back_points[3])
         }
         return front, back
+
+    #######################
+    # Annotation Creation #
+    #######################
 
     def create_annotation(self, option, label, points_3d, annotation_pixels, width, height, full_annotations_only):
         """
@@ -453,6 +742,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
         else:
             raise ValueError(f"Unsupported option: {option}. Supported options are {list(AnnotationOption)}.")
 
+    ##################
+    # Frame Handling #
+    ##################
+
     def handle_frame(self, items_path, labels_colors, cameras_map, frame_images, frame_annotations, config):
         """
         Calculate frame annotations.
@@ -470,13 +763,6 @@ class AnnotationProjection(dl.BaseServiceRunner):
         debug = config.get("debug", False)
         apply_image_undistortion = config.get("apply_image_undistortion", False)
         apply_annotation_distortion = config.get("apply_annotation_distortion", True)
-
-        # Debug flags:
-        # "Manual"
-        # "OpenCV" (Debug)
-        # TODO: Moving OpenCV usage to tests
-        undistort_mode = "Manual"
-        projection_mode = "Manual"
 
         # iterate over images that correspond with frame
         images_map = {}
@@ -504,51 +790,40 @@ class AnnotationProjection(dl.BaseServiceRunner):
             sensors_data = camera_calibrations.get('sensorsData')
 
             # calculate view matrix (Default values: Center of the camera is at (0,0,0))
-            camera_rotation = sensors_data.get('extrinsic', dict()).get('rotation')
-            camera_rotation = [
-                camera_rotation.get('x', 0.0),
-                camera_rotation.get('y', 0.0),
-                camera_rotation.get('z', 0.0),
-                camera_rotation.get('w', 1.0)
-            ]
-            camera_translation = sensors_data.get('extrinsic', dict()).get('position')
-            camera_translation = [
-                camera_translation.get('x', 0.0),
-                camera_translation.get('y', 0.0),
-                camera_translation.get('z', 0.0)
-            ]
-            view_matrix = self.mvp_calculator.calculate_view_matrix(camera_rotation, camera_translation)
+            extrinsic_data = sensors_data.get('extrinsic', dict())
+            view_matrix = self.camera_model_handler.calculate_view_matrix(extrinsic_data=extrinsic_data)
 
             # calculate projection matrix (Default values: Orthographic projection)
             intrinsic_data = sensors_data.get('intrinsicData', dict())
-            fx = intrinsic_data.get('fx', 1.0)
-            fy = intrinsic_data.get('fy', 1.0)
-            cx = intrinsic_data.get('cx', 0.0)
-            cy = intrinsic_data.get('cy', 0.0)
-            skew = intrinsic_data.get('skew', 0.0)
-            projection_matrix = self.mvp_calculator.calculate_projection_matrix(fx, fy, cx, cy, skew)
+            projection_matrix = self.camera_model_handler.calculate_projection_matrix(intrinsic_data=intrinsic_data)
 
             camera_distortion = intrinsic_data.get('distortion', dict())
 
             # Default Camera Model
             if "model" not in camera_distortion:
-                camera_distortion["model"] = CameraModel.BC
+                # Auto camera model detection
+                if camera_distortion.get("xi", None) is not None:
+                    camera_model = CameraModel.MEI
+                elif camera_distortion.get("r0", None) is not None:
+                    camera_model = CameraModel.CUSTOM0
+                elif camera_distortion.get("p1", None) is not None or camera_distortion.get("p2", None) is not None:
+                    camera_model = CameraModel.BC
+                else:
+                    camera_model = CameraModel.KB
+                camera_distortion["model"] = camera_model
+
+                # NOTE: Debugging purposes
+                # camera_distortion["model"] = CameraModel.BC
+                # camera_distortion["model"] = CameraModel.KB
+                # camera_distortion["model"] = CameraModel.MEI
                 # camera_distortion["model"] = CameraModel.CUSTOM0
             else:
-                camera_model = camera_distortion["model"]
+                camera_model = camera_distortion["model"].lower()
                 if camera_model not in list(CameraModel):
                     raise ValueError(
                         f"Unsupported camera model: {camera_model}. "
                         f"Supported models are: {list(CameraModel)}."
                     )
-                
-                if camera_model == CameraModel.MEI and (undistort_mode == "OpenCV" or projection_mode == "OpenCV"):
-                    try:
-                        import cv2.omnidir
-                    except ImportError:
-                        raise ImportError(
-                            "cv2.omnidir is not installed. Please install it using 'pip install opencv-contrib-python'."
-                        )
 
             ################
             # Undistortion #
@@ -572,103 +847,17 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     item.download(local_path=download_image_path)
 
                 # Remove distortion from image
+                image = cv2.imread(image_path)
                 if apply_image_undistortion:
-                    # TODO: Check why this import is required (without it cv2 is not defined)
-                    import cv2
-
-                    # Manual Undistortion
-                    if undistort_mode == "Manual":
-                        h, w = item.height, item.width
-    
-                        map_x = np.zeros((h, w), dtype=np.float32)
-                        map_y = np.zeros((h, w), dtype=np.float32)
-                        for j in range(h):
-                            for i in range(w):
-                                z = 1.0
-                                y = (j - cy) / fy
-                                x = (i - cx - skew * y) / fx
-
-                                x_d, y_d = self.camera_model_handler.apply_distortion_to_point(
-                                    x=x, y=y, z=z, camera_distortion=camera_distortion
-                                )
-                                
-                                map_x[j, i] = fx * x_d + skew * y_d + cx
-                                map_y[j, i] = fy * y_d + cy
-                        
-                        image = cv2.imread(image_path)
-
-                        # Option 1: Using map_coordinates (slower)
-                        # coords = [map_y.ravel(), map_x.ravel()]
-                        # undistorted_r = map_coordinates(
-                        #     image[:, :, 0], coords, order=1, mode='reflect').reshape((h, w))
-                        # undistorted_g = map_coordinates(
-                        #     image[:, :, 1], coords, order=1, mode='reflect').reshape((h, w))
-                        # undistorted_b = map_coordinates(
-                        #     image[:, :, 2], coords, order=1, mode='reflect').reshape((h, w))
-                        # undistorted = np.stack(
-                        #     [undistorted_r, undistorted_g, undistorted_b], axis=2).astype(np.uint8)
-
-                        # Option 2: Using remap (faster)
-                        undistorted = cv2.remap(
-                            image, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT
-                        )
-
-                    # OpenCV Undistortion
-                    elif undistort_mode == "OpenCV":
-                        camera_model = camera_distortion["model"]
-                        k1 = camera_distortion.get("k1", 0.0)
-                        k2 = camera_distortion.get("k2", 0.0)
-                        k3 = camera_distortion.get("k3", 0.0)
-                        k4 = camera_distortion.get("k4", 0.0)
-                        p1 = camera_distortion.get("p1", 0.0)
-                        p2 = camera_distortion.get("p2", 0.0)
-                        xi = camera_distortion.get("xi", 0.0)
-
-                        # Original distorted image
-                        image = cv2.imread(image_path)
-                        h, w = image.shape[:2]
-
-                        # Build K matrix for OpenCV
-                        K = np.array([
-                            [fx, skew, cx],
-                            [0, fy, cy],
-                            [0, 0, 1]
-                        ])
-
-                        # Distortion coefficients
-                        if camera_model == CameraModel.BC:
-                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-                            undistorted = cv2.undistort(
-                                src=image, cameraMatrix=K, distCoeffs=D, dst=None, newCameraMatrix=K
-                            )
-                        elif camera_model == CameraModel.KB:
-                            D = np.array([k1, k2, k3, k4], dtype=np.float64)
-                            undistorted = cv2.fisheye.undistortImage(
-                                distorted=image, K=K, D=D, undistorted=None, Knew=cv2.KAZE_DIFF_CHARBONNIER, new_size=(w, h)
-                            )
-                        elif camera_model == CameraModel.MEI:
-                            D = np.array([k1, k2, k3, k4], dtype=np.float64)
-                            undistorted = cv2.omnidir.undistortImage(
-                                distorted=image, K=K, D=D, xi=xi, flags=cv2.omnidir.RECTIFY_PERSPECTIVE, undistorted=None, Knew=K, new_size=(w, h), R=None
-                            )
-                        else:
-                            raise ValueError(
-                                f"[OpenCV] Unsupported camera model: {camera_model}. "
-                                f"Supported models are: {CameraModel.BC} and {CameraModel.KB}."
-                            )
-
-                    else:
-                        raise ValueError(
-                            f"Unsupported undistort mode: {undistort_mode}. "
-                            f"Supported modes are 'Manual' and 'OpenCV'."
-                        )
-                    
+                    undistorted = self.camera_model_handler.annotation_undistortion(
+                        image=image,
+                        projection_matrix=projection_matrix,
+                        camera_distortion=camera_distortion
+                    )
                     # Save locally
                     cv2.imwrite(output_image_path, undistorted)
-
                 else:
                     # Overwrite annotated image
-                    image = cv2.imread(image_path)
                     cv2.imwrite(output_image_path, image)
 
                 images_map[item_id] = {
@@ -696,100 +885,35 @@ class AnnotationProjection(dl.BaseServiceRunner):
                     position=annotation_translation
                 )
 
-                # TODO: Validate new radial and tangent fixes - Compare to OpenCV
-                # Manual MVP
-                if projection_mode == "Manual":
-                    mv = view_matrix @ model_matrix
-                    points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-                    points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
-                    points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
+                # Model + View
+                model_view_matrix = view_matrix @ model_matrix
+                points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
+                points_4d = (model_view_matrix @ points_homogeneous.T).T  # (N, 4)
+                points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
 
-                    # Check if the points are behind the camera
-                    if not np.all(points_3d[:, 2] > 0):
-                        continue  # Skip if any point is behind the camera
+                # Check if the points are behind the camera
+                if not np.all(points_3d[:, 2] > 0):
+                    continue  # Skip if any point is behind the camera
 
-                    # Distortion
-                    if apply_annotation_distortion:
-                        projection_function = self.camera_model_handler.apply_distortion_to_point
-                    else:
-                        # If no distortion, just use the projected pixel directly
-                        projection_function = lambda x, y, z, camera_distortion: (x / z, y / z)
-                    
-                    annotation_pixels = []
-                    for point_3d in points_3d:
-                        (x, y, z) = point_3d
-                        x_d, y_d = projection_function(
-                            x=x, y=y, z=z, camera_distortion=camera_distortion
-                        )
-                        # Convert back to pixel coordinates
-                        mv_points = np.array([x_d, y_d, 1, 1])
-                        mvp_points = projection_matrix @ mv_points
-                        annotation_pixels.append(mvp_points[:2])
-
-                    annotation_pixels = np.array(annotation_pixels)
-
-                # OpenCV MVP
-                elif projection_mode == "OpenCV":
-                    camera_model = camera_distortion["model"]
-                    k1 = camera_distortion.get("k1", 0.0)
-                    k2 = camera_distortion.get("k2", 0.0)
-                    k3 = camera_distortion.get("k3", 0.0)
-                    k4 = camera_distortion.get("k4", 0.0)
-                    p1 = camera_distortion.get("p1", 0.0)
-                    p2 = camera_distortion.get("p2", 0.0)
-                    xi = camera_distortion.get("xi", 0.0)
-
-                    mv = view_matrix @ model_matrix  # Model View matrix
-                    K = projection_matrix[:3, :3]  # Projection matrix
-
-                    # Check if the points are behind the camera
-                    points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-                    points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
-                    points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
-                    if not np.all(points_3d[:, 2] > 0):
-                        continue  # Skip if any point is behind the camera
-
-                    # Option 1 - Apply MV on points manually
-                    # points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-                    # points_4d = (mv @ points_homogeneous.T).T  # (N, 4)
-                    # points_3d = points_4d[:, :3]  # (N, 3)
-                    # object_points = points_3d.reshape(-1, 3)  # (N, 3)
-                    # rvec = np.zeros((3, 1), dtype=np.float64)
-                    # tvec = np.zeros((3, 1), dtype=np.float64)
-
-                    # Option 2 - Apply MV on points using OpenCV
-                    object_points = points.reshape(1, -1, 3)
-                    rvec = cv2.Rodrigues(mv[:3, :3])[0].astype(np.float64)  # Rotation vector
-                    tvec = mv[:3, 3].reshape(-1, 1).astype(np.float64)  # Translation vector
-
-                    if apply_annotation_distortion:
-                        # 2D camera #
-                        if camera_model == CameraModel.BC:
-                            D = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
-                            (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
-                        elif camera_model == CameraModel.KB:
-                            D = np.array([k1, k2, k3, k4], dtype=np.float64)
-                            (points_2d, _) = cv2.fisheye.projectPoints(object_points, rvec, tvec, K, D)
-                        elif camera_model == CameraModel.MEI:
-                            D = np.array([k1, k2, p1, p2], dtype=np.float64)
-                            (points_2d, _) = cv2.omnidir.projectPoints(object_points, rvec, tvec, K, xi, D)
-                        else:
-                            raise ValueError(
-                                f"[OpenCV] Unsupported camera model: {camera_model}.\n"
-                                f"Supported models are: {CameraModel.BC} and {CameraModel.KB}."
-                            )
-                    else:
-                        D = np.zeros((5,), dtype=np.float64)
-                        (points_2d, _) = cv2.projectPoints(object_points, rvec, tvec, K, D)
-
-                    # points_2d: (N, 1, 2) - OpenCV format
-                    annotation_pixels = points_2d.reshape(-1, 2)  # (N, 2)
-                
-                else:
-                    raise ValueError(
-                        f"Unsupported projection mode: {projection_mode}. "
-                        f"Supported modes are: 'Manual' and 'OpenCV'."
+                # Apply annotation distortion
+                if apply_annotation_distortion:
+                    annotation_pixels = self.camera_model_handler.annotation_distortion(
+                        mv_matrix=model_view_matrix,
+                        p_matrix=projection_matrix,
+                        points=points,
+                        points_3d=points_3d,
+                        camera_distortion=camera_distortion
                     )
+                # If no annotation distortion, just use the projected pixel directly
+                else:
+                    annotation_pixels = self.camera_model_handler.defualt_annotation_projection(
+                        p_matrix=projection_matrix,
+                        points_3d=points_3d
+                    )
+
+                # Skip if any point is behind the camera
+                if annotation_pixels is None:
+                    continue
 
                 # Select annotation option based on the projection mode
                 if debug is False:
@@ -907,6 +1031,10 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
         return frame_annotations_per_frame
 
+    #################
+    # Main Function #
+    #################
+
     def project_annotations_to_2d(self, item: dl.Item, context: dl.Context = None):
         """
         Function that projects annotations to 2D from the original lidar scene annotations.
@@ -986,7 +1114,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
 
 if __name__ == "__main__":
     # frames json item ID
-    item_id = '686699883d66eb96ffd891fa'
+    item_id = '685aa5d70e8ed7647c44f096'
     frames_item = dl.items.get(item_id=item_id)
     # frames_item.open_in_web()
 
@@ -1009,7 +1137,8 @@ if __name__ == "__main__":
         )
     )
 
-    runner = AnnotationProjection()
+    mode = "manual"
+    runner = AnnotationProjection(mode=mode)
     runner.project_annotations_to_2d(
         item=frames_item,
         context=context
