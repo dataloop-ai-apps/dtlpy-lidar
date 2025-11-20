@@ -19,8 +19,8 @@ class Intrinsic:
         self.skew = skew
         self.intrinsicMatrix = [fx, skew, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
     
-    @staticmethod
-    def from_matrix(matrix: np.ndarray):
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray):
         """
         Intrinsic matrix to Intrinsic object.
         :param matrix: 3x3 or 4x4 intrinsic matrix
@@ -29,7 +29,7 @@ class Intrinsic:
         if matrix.shape != (3, 3) and matrix.shape != (4, 4):
             raise ValueError(f"Invalid intrinsic matrix shape: {matrix.shape}")
 
-        return Intrinsic(fx=matrix[0, 0], fy=matrix[1, 1], cx=matrix[0, 2], cy=matrix[1, 2], skew=matrix[0, 1])
+        return cls(fx=matrix[0, 0], fy=matrix[1, 1], cx=matrix[0, 2], cy=matrix[1, 2], skew=matrix[0, 1])
 
     def to_json(self, distortion=None):
         """

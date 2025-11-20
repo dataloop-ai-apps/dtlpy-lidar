@@ -120,8 +120,8 @@ class Extrinsic:
         self.rotation = rotation
         self.translation = translation
 
-    @staticmethod
-    def from_matrix(matrix: np.ndarray):
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray):
         """
         Extrinsic matrix to Extrinsic object.
         :param matrix: 4x4 extrinsic matrix
@@ -132,7 +132,7 @@ class Extrinsic:
         
         quaternion = R.from_matrix(matrix[:3, :3]).as_quat()
         translation = matrix[:3, 3].tolist()
-        return Extrinsic(
+        return cls(
             rotation=QuaternionRotation(x=quaternion[0], y=quaternion[1], z=quaternion[2], w=quaternion[3]),
             translation=Translation(x=translation[0], y=translation[1], z=translation[2])
         )
