@@ -34,8 +34,14 @@ class AnnotationOption(str, Enum):
     POINTS = "points"
 
 
+class HandlerType(str, Enum):
+    """Handler type constants."""
+    CUSTOM = "custom"
+    OPENCV = "opencv"
+
+
 # ============================================================================
-# MVP CALCULATOR
+# MVP CALCULATOR (Model-View-Projection) + CAMERA MODEL HANDLER
 # ============================================================================
 
 class MVPCalculator:
@@ -77,18 +83,6 @@ class MVPCalculator:
             [0,  0,    1,  0],
             [0,  0,    0,  1]
         ])
-    
-    def caluculate_world_space_points(self, mv_matrix: np.ndarray, points: np.ndarray) -> Union[None, np.ndarray]:
-        # Model + View
-        points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1))])  # (N, 4)
-        points_4d = (mv_matrix @ points_homogeneous.T).T  # (N, 4)
-        points_3d = points_4d[:, :3] / np.abs(points_4d[:, 3:4])  # (N, 3)
-
-        # Check if the points are behind the camera
-        if not np.all(points_3d[:, 2] > 0):
-            return None  # Return None if any point is behind the camera
-
-        return points_3d
 
     def defualt_annotation_projection(self, p_matrix: np.ndarray, points_3d: np.ndarray) -> np.ndarray:
         # Default Projection
@@ -105,9 +99,6 @@ class MVPCalculator:
         annotation_pixels = np.array(annotation_pixels)
         return annotation_pixels
 
-# ============================================================================
-# CAMERA MODEL HANDLER - Eliminates Code Duplication
-# ============================================================================
 
 class CustomCameraModelHandler(MVPCalculator):
     """
@@ -510,17 +501,17 @@ class OpenCVCameraModelHandler(MVPCalculator):
 # ============================================================================
 
 class AnnotationProjection(dl.BaseServiceRunner):
-    def __init__(self, mode: str = "manual"):
+    def __init__(self, mode: str = HandlerType.CUSTOM):
         # Debug flags:
-        # "Manual"
+        # "Custom"
         # "OpenCV" (Debug)
         # TODO: Moving OpenCV usage to tests
-        if mode.lower() == "manual":
+        if mode.lower() == HandlerType.CUSTOM:
             self.camera_model_handler = CustomCameraModelHandler()
-        elif mode.lower() == "opencv":
+        elif mode.lower() == HandlerType.OPENCV:
             self.camera_model_handler = OpenCVCameraModelHandler()
         else:
-            raise ValueError(f"Invalid mode: {mode}. Supported modes are: 'manual' and 'opencv'.")
+            raise ValueError(f"Invalid mode: {mode}. Supported modes are: 'custom' and 'opencv'.")
 
         self.face_indices = {
             "front": [4, 5, 7, 6],  # Z = +1
@@ -1100,6 +1091,7 @@ class AnnotationProjection(dl.BaseServiceRunner):
             #################
             # Handle Images #
             #################
+
             frame_images = lidar_video_content.get('frames', list())[frame_num].get('images', list())
             frame_annotations = frame_annotations_per_frame.get(frame_num, list())
             self.handle_frame(
@@ -1137,7 +1129,7 @@ if __name__ == "__main__":
         )
     )
 
-    mode = "manual"
+    mode = HandlerType.CUSTOM
     runner = AnnotationProjection(mode=mode)
     runner.project_annotations_to_2d(
         item=frames_item,
