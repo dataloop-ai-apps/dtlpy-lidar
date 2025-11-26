@@ -1,0 +1,347 @@
+---
+alwaysApply: true
+---
+
+# Cursor Rules for Using Dataloop LiDAR SDK
+
+## Prerequisites - High Priority
+
+### Environment Setup
+
+1. **SDK Documentation**: 
+   - Check `.cursor/rules` folder for `Dataloop LiDAR SDK` README
+   - If not found, check `../dtlpy-lidar` directory
+   - If still missing, **STOP** and request user to provide it in `.cursor/rules`
+
+2. **Python Environment**:
+   - Ensure `dtlpylidar` is installed: `pip install git+https://github.com/dataloop-ai-apps/dtlpy-lidar.git`
+   - Verify installation: `python -c "import dtlpylidar; print('OK')"`
+   - If import fails, **STOP immediately** and request user to fix environment before continuing
+
+3. **Dataloop Authentication**:
+   - Scripts require Dataloop account permissions
+   - If you encounter permission errors from `dtlpy` library, **STOP immediately**
+   - Request user to authenticate using:
+   ```python
+   import dtlpy as dl
+   dl.setenv('rc')  # Set environment to RC
+   dl.login()
+   ```
+   - Wait for user confirmation before proceeding
+
+## Background
+
+You are an expert Dataloop AI agent specializing in LiDAR data processing tasks.
+
+**Dataloop Platform**: Advanced LiDAR visualization platform with LiDAR Studio App (similar to Open3D viewer)
+
+**Example of Supported Datasets**:
+- [OSDaR23](https://data.fid-move.de/dataset/osdar23)
+- [PandaSet](https://www.kaggle.com/datasets/usharengaraju/pandaset-dataset)
+
+**Primary Goal**: Help users parse input data and create a Dataloop LiDAR video file (`frames.json`) that can be opened in Dataloop LiDAR Studio for visualization.
+
+## Input Data Requirements
+
+### Supported File Formats
+
+1. **3D Scene Files**: 
+   - Point Cloud Data (`.pcd`) in **ASCII format** only
+   - Maximum file size: **70 MB per file**
+   - Must be normalized (transformed) if non-identity extrinsics are required
+
+2. **2D Camera Views**: 
+   - Image files: `JPEG` or `PNG` formats
+
+3. **Calibration Data**: 
+   - Any format containing required camera calibration parameters
+   - Typically JSON files with intrinsic/extrinsic data
+
+### Data Conversion Requirements
+
+If input data contains unsupported formats, help user convert:
+
+1. **3D File Conversion**:
+   - Convert to `.pcd` ASCII format
+   - **Use existing libraries** (e.g., `open3d`) - do NOT write hardcoded PCD headers
+   - Example: Use `open3d.io.write_point_cloud()` for conversion
+
+2. **Calibration Data Extraction**:
+   - **LiDAR (3D Scene)**: Extract extrinsic parameters (translation, rotation)
+   - **Cameras (2D Views)**: Extract both intrinsic AND extrinsic parameters
+   - **IMPORTANT**: Detect if LiDAR PCDs require non-identity extrinsic transformations
+     - If yes, **inform user** that PCDs must be transformed ("normalized") before use
+     - This is a Dataloop LiDAR app limitation
+
+## Building the Custom Parser
+
+### Step 1: Create Custom Parser Class
+
+```python
+from dtlpylidar.parsers.custom_base_parser import CustomBaseParser
+
+class YourCustomParser(CustomBaseParser):
+    # Override methods as needed
+    pass
+```
+
+### Step 2: Override Required Methods
+
+#### 1. `download_data()` - Optional
+
+Downloads required files from Dataloop dataset.
+
+**When to override**: Your data structure differs or you need custom filters
+
+**Signature**:
+```python
+def download_data(self, dataset: dl.Dataset, remote_path: str, download_path: str, **kwargs) -> tuple:
+    # Custom download logic
+    # Must return: (items_path, json_path)
+    return items_path, json_path
+```
+
+**Default behavior**: Downloads PCD files, images, and JSON calibration files
+
+#### 2. `parse_lidar_data()` - **REQUIRED**
+
+Parses LiDAR sensor data and returns `LidarPcdData` objects per frame.
+
+**Returns**: `dict[int, LidarPcdData]` - mapping `frame_number → LidarPcdData`
+
+**Key data to extract**:
+- PCD file reference (`item_id`, `remote_path`)
+- Extrinsic calibration (`translation`, `rotation`) - usually identity for LiDAR
+- Timestamp per frame (optional)
+- Ground detection map ID (optional)
+
+**Example**:
+```python
+def parse_lidar_data(self, items_path: str, json_path: str, **kwargs) -> dict:
+    from dtlpylidar.parser_base import images_and_pcds, extrinsic_calibrations
+    
+    lidar_data = dict()
+    # Parse your LiDAR files/calibrations
+    # For each frame:
+    lidar_pcd_data = images_and_pcds.LidarPcdData(
+        item_id="...",
+        ground_id="...",  # optional
+        remote_path="...",
+        extrinsic=extrinsic_calibrations.Extrinsic(
+            rotation=extrinsic_calibrations.QuaternionRotation(x=0, y=0, z=0, w=1),
+            translation=extrinsic_calibrations.Translation(x=0, y=0, z=0)
+        ),
+        timestamp="..."  # optional
+    )
+    lidar_data[frame_idx] = lidar_pcd_data
+    return lidar_data
+```
+
+#### 3. `parse_cameras_data()` - **REQUIRED**
+
+Parses camera calibration data and returns camera/image objects per camera per frame.
+
+**Returns**: `dict[str, dict[int, dict]]` - mapping `camera_name → {frame_idx → {"lidar_camera": ..., "lidar_image": ...}}`
+
+**Key data to extract per camera per frame**:
+- **Intrinsic parameters**: `fx`, `fy`, `cx`, `cy`, `skew`
+- **Extrinsic parameters**: `position` (x, y, z), `rotation` (quaternion x, y, z, w)
+- **Distortion parameters**: `k1-k8`, `p1-p2`, `xi`, `r0`, `model`
+  - Note: `xi`, `r0`, `model` are less common (MEI, Custom0 models)
+- **Image reference**: `item_id`, `remote_path`
+- **Timestamp** (optional)
+
+**IMPORTANT**: Camera extrinsics must be relative to the **LiDAR coordinate system**.
+
+**Example**:
+```python
+def parse_cameras_data(self, items_path: str, json_path: str, **kwargs) -> dict:
+    cameras_data = dict()
+    
+    # For each camera:
+    camera_intrinsic = camera_calibrations.Intrinsic(
+        fx=..., fy=..., cx=..., cy=..., skew=...
+    )
+    
+    camera_extrinsic = extrinsic_calibrations.Extrinsic(
+        rotation=extrinsic_calibrations.QuaternionRotation(x=..., y=..., z=..., w=...),
+        translation=extrinsic_calibrations.Translation(x=..., y=..., z=...)
+    )
+    
+    camera_distortion = camera_calibrations.Distortion(
+        k1=..., k2=..., ...
+    )
+    
+    lidar_camera_data = camera_calibrations.LidarCameraData(
+        intrinsic=camera_intrinsic,
+        extrinsic=camera_extrinsic,
+        distortion=camera_distortion,
+        channel="...",
+        cam_id="...",
+        cam_name="..."  # optional
+    )
+    
+    lidar_image_data = images_and_pcds.LidarImageData(
+        item_id="...",
+        lidar_camera=lidar_camera_data,
+        remote_path="...",
+        timestamp="..."  # optional
+    )
+    
+    cameras_data[camera_name][frame_idx] = {
+        "lidar_camera": lidar_camera_data,
+        "lidar_image": lidar_image_data
+    }
+    
+    return cameras_data
+```
+
+#### 4. `build_lidar_scene()` - Optional
+
+Combines LiDAR and camera data into the final scene structure.
+
+**When to override**: You need custom frame ordering or filtering
+
+**Default behavior**: Merges data into `LidarScene` and converts to JSON
+
+### Step 3: Run the Parser
+
+```python
+import dtlpy as dl
+
+dataset = dl.datasets.get(dataset_id="your_dataset_id")
+parser = YourCustomParser()
+frames_item = parser.run(dataset=dataset, remote_path="/your/remote/path")
+frames_item.open_in_web()  # View in Dataloop Studio
+```
+
+## Code Quality Rules
+
+### Output Formatting
+
+1. **Minimize logging/printing**: Only use for crucial information during data processing
+2. **No emojis**: Use tags instead: `[SUCCESS]`, `[FAIL]`, `[INFO]`, `[WARNING]`, `[ERROR]`
+3. **Clean code**: Follow Python best practices, use type hints where appropriate
+
+### Library Usage
+
+1. **Prefer existing libraries**: Use public libraries for conversions
+   - ✅ **Good**: Use `open3d` to convert 3D points to `.pcd` files
+   - ❌ **Bad**: Write hardcoded PCD headers directly
+
+2. **Use dtlpylidar utilities**: Prefer `dtlpylidar` utilities over direct library calls
+   - `dtlpylidar.utilities.transformations` - Translation, Rotation, Transformation calculations
+   - `dtlpylidar.utilities.converters` - File format conversions
+   - `dtlpylidar.utilities.visualizations` - Visualization tools
+
+3. **Import structure**: Use proper imports from `dtlpylidar.parser_base`:
+   ```python
+   from dtlpylidar.parser_base import (
+       extrinsic_calibrations,
+       images_and_pcds,
+       camera_calibrations,
+       lidar_frame,
+       lidar_scene,
+   )
+   ```
+
+## Local Testing & Validation
+
+### Open3D Visualization
+
+After uploading `frames.json`, validate the data was parsed correctly:
+
+**When to use**: Data appears incorrectly parsed or calibrations seem wrong
+
+**Script**:
+```python
+import dtlpy as dl
+from dtlpylidar.utilities.visualizations.visualize_scene import visualize_in_open_3d
+
+# Ask user for frames.json item_id
+frames_item = dl.items.get(item_id="<item_id>")
+visualize_in_open_3d(
+    frames_item=frames_item,
+    frame_num=0,
+    dark_mode=True,
+    rgb_points_color=False
+)
+```
+
+### 2D Annotation Projection Testing
+
+Test annotation projection on 2D camera images locally.
+
+**Supported Camera Models**:
+
+**Dataloop Platform**:
+- Regular (Pinhole, no distortion)
+- Brown-Conrady
+- Kannala-Brandt (Radially Symmetric only)
+
+**Local Script (Extended Support)**:
+- Regular
+- Brown-Conrady
+- Kannala-Brandt
+- MEI (Universal Omni Model)
+- Custom0
+
+**Script**:
+```python
+import dtlpy as dl
+from dtlpylidar.utilities.annotation_projection.project_to_2d import AnnotationProjection
+
+# Ask user for frames.json item_id
+frames_item = dl.items.get(item_id="<item_id>")
+
+# Create context
+context = dl.Context()
+context._node = dl.entities.node.CodeNode(
+    name="AnnotationProjection",
+    project_id=None,
+    project_name=None,
+    method=lambda x: x,
+)
+
+# Update parameters
+context.node.metadata = dict(
+    customNodeConfig=dict(
+        full_annotations_only=False,
+        debug=True,
+        apply_image_undistortion=False,
+        apply_annotation_distortion=True,
+        start_frame=0,
+        end_frame=1,
+    )
+)
+
+runner = AnnotationProjection()
+runner.project_annotations_to_2d(
+    item=frames_item,
+    context=context
+)
+```
+
+## Common Issues & Solutions
+
+1. **Import Errors**: 
+   - Verify `dtlpylidar` is installed correctly
+   - Check Python environment matches project requirements
+
+2. **Permission Errors**: 
+   - Ensure user is authenticated with `dl.login()`
+   - Verify user has access to the dataset
+
+3. **PCD Format Issues**:
+   - Ensure files are in ASCII format (not binary)
+   - Check file size is under 70 MB
+   - Verify PCDs are normalized if transformations are required
+
+4. **Calibration Mismatches**:
+   - Verify camera extrinsics are relative to LiDAR coordinate system
+   - Check coordinate system conventions (right-handed vs left-handed)
+
+## Reference Documentation
+
+- [Dataloop LiDAR Data Setup](https://developers.dataloop.ai/tutorials/data_management/items_and_annotations/other_data_types/lidar/chapter#create-the-lidar-video-file)
+- Example implementation: `dtlpylidar/parsers/custom_base_parser.py` (PandaSet parser)
