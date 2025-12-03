@@ -111,7 +111,9 @@ Parses LiDAR sensor data and returns `LidarPcdData` objects per frame.
 
 **Key data to extract**:
 - PCD file reference (`item_id`, `remote_path`)
-- Extrinsic calibration (`translation`, `rotation`) - usually identity for LiDAR
+- **Extrinsic calibration MUST be identity** (`translation` = 0,0,0, `rotation` = 0,0,0,1)
+  - LiDAR PCDs must always have identity transformation
+  - Any LiDAR transformations are applied to cameras, not to PCDs
 - Timestamp per frame (optional)
 - Ground detection map ID (optional)
 
@@ -151,7 +153,18 @@ Parses camera calibration data and returns camera/image objects per camera per f
 - **Image reference**: `item_id`, `remote_path`
 - **Timestamp** (optional)
 
-**IMPORTANT**: Camera extrinsics must be relative to the **LiDAR coordinate system**.
+**IMPORTANT**: 
+- Camera extrinsics must be relative to the **LiDAR coordinate system**
+- **LiDAR transformation multiplication**: If LiDAR has a transformation matrix, multiply it with each camera's lidar2cam transform:
+  ```python
+  # Get LiDAR transform from calibs
+  lidar_transform_matrix = np.array(lidar_calib.get("lidar2cam", identity))
+  
+  # For each camera:
+  camera_lidar2cam_matrix = np.array(camera_calib.get("lidar2cam", identity))
+  # Multiply: final_transform = lidar_transform @ camera_lidar2cam
+  final_transform_matrix = np.dot(lidar_transform_matrix, camera_lidar2cam_matrix)
+  ```
 
 **Example**:
 ```python
@@ -204,7 +217,157 @@ Combines LiDAR and camera data into the final scene structure.
 
 **Default behavior**: Merges data into `LidarScene` and converts to JSON
 
-### Step 3: Run the Parser
+### Step 3: Create Config File
+
+**Config file pattern**: `config_<dataset_name>.py`
+
+The config file should:
+1. Define all hyperparameters in `main()` function
+2. Orchestrate the full pipeline:
+   - PCD normalization (pre-conversion step, if needed)
+   - Data upload to Dataloop (if needed)
+   - Data parsing and frames.json generation
+
+**Critical Rules for Data Paths and Uploads**:
+
+1. **Separate Path Tracking**:
+   - **MUST** track `lidar_path` and `images_path` separately
+   - `lidar_path` may point to normalized directory if normalization was done
+   - `images_path` always points to original camera/images location (never changes)
+
+2. **PCD Normalization**:
+   - Normalized PCDs are created in a **separate directory** (never overwrite originals)
+   - If normalization is done, `lidar_path` is updated to point to normalized directory
+   - Original lidar files remain untouched in their original location
+
+3. **Upload Operations**:
+   - **If normalization is required**:
+     - **MUST** perform two separate upload operations:
+       - **Upload 1**: Lidar files only (from normalized `lidar_path`)
+       - **Upload 2**: Image files only (from `images_path` - original location)
+     - **Only normalized lidar files are uploaded** (original lidar files are never uploaded)
+   - **If normalization is NOT required**:
+     - **Can** upload both lidar and images in a single operation
+     - **ONLY** if the local data structure is already prepared and organized correctly
+     - **MUST** investigate the local structure with the user first to confirm it's ready
+     - If structure needs organization, use separate uploads for clarity and control
+
+4. **Upload Function Design**:
+   - `upload_lidar_step()` should accept `lidar_path` and upload only PCDs
+   - `upload_images_step()` should accept `images_path` and upload only images
+   - Each upload function should use `upload_pcds=True/False` and `upload_images=True/False` flags appropriately
+
+**Example structure**:
+```python
+def normalize_step(parser, lidar_path, output_dir):
+    """Normalize PCDs to separate directory."""
+    return parser.normalize_pcds(source_dir=lidar_path, output_dir=output_dir)
+
+def upload_lidar_step(parser, dataset, lidar_path, remote_path):
+    """Upload lidar files (normalized or original)."""
+    parser.upload_data_to_dataloop(
+        dataset=dataset,
+        local_data_path=lidar_path,
+        remote_path=remote_path,
+        upload_pcds=True,
+        upload_images=False
+    )
+
+def upload_images_step(parser, dataset, images_path, remote_path):
+    """Upload image files."""
+    parser.upload_data_to_dataloop(
+        dataset=dataset,
+        local_data_path=images_path,
+        remote_path=remote_path,
+        upload_pcds=False,
+        upload_images=True
+    )
+
+def parse_step(parser, dataset, remote_path):
+    """Parse data and generate frames.json."""
+    return parser.run(dataset=dataset, remote_path=remote_path)
+
+def main():
+    # Hyperparameters
+    DATASET_ID = "..."
+    REMOTE_PATH = "..."
+    LOCAL_DATA_PATH = "..."
+    NORMALIZED_LIDAR_DIR = "..."
+    NORMALIZE_PCDS = False
+    UPLOAD_DATA = False
+    RUN_PARSER = True
+    
+    dl.setenv('rc')
+    if dl.token_expired():
+        dl.login()
+    
+    dataset = dl.datasets.get(dataset_id=DATASET_ID)
+    parser = YourCustomParser()
+    
+    lidar_path = os.path.join(LOCAL_DATA_PATH, "lidar")
+    images_path = os.path.join(LOCAL_DATA_PATH, "camera")
+    
+    if NORMALIZE_PCDS:
+        lidar_path = normalize_step(parser, lidar_path, NORMALIZED_LIDAR_DIR)
+    
+    if UPLOAD_DATA:
+        upload_lidar_step(parser, dataset, lidar_path, REMOTE_PATH)
+        upload_images_step(parser, dataset, images_path, REMOTE_PATH)
+    
+    if RUN_PARSER:
+        parse_step(parser, dataset, REMOTE_PATH)
+```
+
+### Step 4: Parser Additional Methods
+
+#### `normalize_pcds()` - Optional (Pre-conversion step)
+
+**Purpose**: Normalize PCD files to ASCII format before upload/processing.
+
+**Requirements**:
+- **MUST be separate from `run()` function** - not executed in main parsing flow
+- Exports normalized PCDs to a **different folder** (not overwriting originals)
+- Uses `open3d` (built into dtlpylidar, no availability check needed)
+
+**Signature**:
+```python
+def normalize_pcds(self, source_dir: str, output_dir: str, **kwargs) -> str:
+    """
+    Normalize PCD files: convert to ASCII format.
+    Pre-conversion step - exports to different folder.
+    """
+    # Normalization logic - minimal logging, let operations fail naturally
+    ...
+```
+
+#### `upload_data_to_dataloop()` - Optional
+
+**Purpose**: Upload data to Dataloop platform (if user requests).
+
+**Requirements**:
+- **MUST be called separately** for lidar and images (two separate calls)
+- First call: Upload lidar files only (from normalized directory if normalization was done)
+- Second call: Upload image files only (always from original location)
+- Configurable options for what to upload (PCDs, images, calibrations)
+- If normalization was done, only normalized lidar files are uploaded (original lidar files are never uploaded)
+
+**Signature**:
+```python
+def upload_data_to_dataloop(
+    self,
+    dataset: dl.Dataset,
+    local_data_path: str,
+    remote_path: str = "/",
+    upload_pcds: bool = True,
+    upload_images: bool = True,
+    upload_calibs: bool = True,
+    **kwargs
+) -> dict:
+    # Upload logic - minimal logging, let operations fail naturally
+    ...
+```
+
+### Step 5: Run the Parser
 
 ```python
 import dtlpy as dl
@@ -219,9 +382,21 @@ frames_item.open_in_web()  # View in Dataloop Studio
 
 ### Output Formatting
 
-1. **Minimize logging/printing**: Only use for crucial information during data processing
-2. **No emojis**: Use tags instead: `[SUCCESS]`, `[FAIL]`, `[INFO]`, `[WARNING]`, `[ERROR]`
-3. **Clean code**: Follow Python best practices, use type hints where appropriate
+1. **Minimal logging**: 
+   - Set logging level to ERROR only: `logging.basicConfig(level=logging.ERROR)`
+   - Remove all info/debug/warning logs
+   - Let functions crash naturally with clear error messages
+   - No verbose progress messages or step indicators
+
+2. **Minimal validations**:
+   - Remove file existence checks - let operations fail naturally
+   - Remove dictionary key checks - use direct access (will raise KeyError)
+   - Remove try/except blocks that suppress errors
+   - Let underlying functions crash with clear error messages
+
+3. **No emojis**: Use tags instead: `[SUCCESS]`, `[FAIL]`, `[INFO]`, `[WARNING]`, `[ERROR]`
+
+4. **Clean code**: Follow Python best practices, use type hints where appropriate
 
 ### Library Usage
 
@@ -229,12 +404,21 @@ frames_item.open_in_web()  # View in Dataloop Studio
    - ✅ **Good**: Use `open3d` to convert 3D points to `.pcd` files
    - ❌ **Bad**: Write hardcoded PCD headers directly
 
-2. **Use dtlpylidar utilities**: Prefer `dtlpylidar` utilities over direct library calls
-   - `dtlpylidar.utilities.transformations` - Translation, Rotation, Transformation calculations
+2. **Use dtlpylidar utilities**: **ALWAYS** use `dtlpylidar` utilities over direct library calls
+   - **Transformations**: **MUST** use `dtlpylidar.utilities.transformations` for all matrix/quaternion conversions
+     - ✅ Use `transformations.rotation_matrix_from_transform_matrix()`
+     - ✅ Use `transformations.translation_vector_from_transform_matrix()`
+     - ✅ Use `transformations.quaternion_from_rotation_matrix()`
+     - ❌ **NEVER** use `scipy.spatial.transform.Rotation` directly
    - `dtlpylidar.utilities.converters` - File format conversions
    - `dtlpylidar.utilities.visualizations` - Visualization tools
 
-3. **Import structure**: Use proper imports from `dtlpylidar.parser_base`:
+3. **Open3D availability**: 
+   - `open3d` is **built into dtlpylidar** - no need to check for availability
+   - Import directly: `import open3d as o3d`
+   - Do NOT wrap in try/except for availability checks
+
+4. **Import structure**: Use proper imports from `dtlpylidar.parser_base`:
    ```python
    from dtlpylidar.parser_base import (
        extrinsic_calibrations,
@@ -243,6 +427,8 @@ frames_item.open_in_web()  # View in Dataloop Studio
        lidar_frame,
        lidar_scene,
    )
+   from dtlpylidar.utilities.transformations import transformations
+   import open3d as o3d
    ```
 
 ## Local Testing & Validation
@@ -335,11 +521,19 @@ runner.project_annotations_to_2d(
 3. **PCD Format Issues**:
    - Ensure files are in ASCII format (not binary)
    - Check file size is under 70 MB
-   - Verify PCDs are normalized if transformations are required
+   - **Normalization workflow**: Normalize PCDs BEFORE upload, upload only normalized versions
+   - Normalization is a pre-conversion step, separate from main `run()` function
 
 4. **Calibration Mismatches**:
    - Verify camera extrinsics are relative to LiDAR coordinate system
+   - **LiDAR transformation**: LiDAR PCDs must have identity transformation
+   - **Camera transformation**: Multiply LiDAR transform with camera lidar2cam transform
    - Check coordinate system conventions (right-handed vs left-handed)
+
+5. **Transformation Issues**:
+   - **ALWAYS** use `dtlpylidar.utilities.transformations` for matrix/quaternion conversions
+   - Do NOT use `scipy.spatial.transform` directly
+   - Use `transformations.rotation_matrix_from_transform_matrix()`, `transformations.quaternion_from_rotation_matrix()`, etc.
 
 ## Reference Documentation
 
