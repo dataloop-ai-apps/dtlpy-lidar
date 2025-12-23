@@ -42,7 +42,7 @@ class BaseToPCDConverter(ABC):
         output_results = []
         for data_filepath in data_filepaths:
             output_filepath = pathlib.Path(output_folder).joinpath(data_filepath.with_suffix(".pcd").relative_to(input_folder))
-            output_result = self.convert_file(data_filepath, output_filepath, **kwargs)
+            output_result = self.convert_file(input_file=data_filepath, output_file=output_filepath, **kwargs)
             output_results.append(output_result)
         
         print(f"Successfully converted {len(output_results)} files")
