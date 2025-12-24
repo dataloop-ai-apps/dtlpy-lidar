@@ -1,36 +1,36 @@
-import struct
-import numpy as np
 import open3d as o3d
+import numpy as np
 from dtlpylidar.utilities.converters.base_converter import PCDConverter, DownsampleConfig
 
 
-class BinToPCD(PCDConverter):
-    def __init__(self, extension: str = ".bin"):
+class PtsToPCD(PCDConverter):
+    def __init__(self, extension: str = ".pts"):
         super().__init__(extension=extension)
 
     def convert_file(self, input_file: str, output_file: str = None, 
                      transform_matrix: np.ndarray = None, downsample_config: DownsampleConfig = None, **kwargs):
         """
-        Convert a BIN file to a PCD file.
+        Convert PTS file to PCD.
+        
         Args:
-            input_file: The path to the input BIN file.
-            output_file: The path to the output PCD file.
+            input_file: Path to input PTS file
+            output_file: Path to output PCD file (optional)
             transform_matrix: Transformation matrix to apply to the point cloud
             downsample_config: Downsample configuration to apply to the point cloud
+        
         Returns:
             o3d.geometry.PointCloud: The converted point cloud
         """
-        size_float = 4
-        list_pcd = []
-        with open(input_file, "rb") as f:
-            byte = f.read(size_float * 4)
-            while byte:
-                x, y, z, intensity = struct.unpack("ffff", byte)
-                list_pcd.append([x, y, z])
-                byte = f.read(size_float * 4)
-        np_pcd = np.asarray(list_pcd)
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(np_pcd)
+        # Read PTS file as point cloud (Open3D supports PTS format natively)
+        pcd = o3d.io.read_point_cloud(input_file)
+        
+        # Validate that point cloud was loaded successfully
+        if not pcd.has_points():
+            raise ValueError(f"PTS file '{input_file}' contains no points or could not be read")
+        
+        if len(pcd.points) == 0:
+            raise ValueError(f"PTS file '{input_file}' is empty")
+            
         pcd = self.transform_and_downsample(
             pcd=pcd, 
             output_file=output_file, 

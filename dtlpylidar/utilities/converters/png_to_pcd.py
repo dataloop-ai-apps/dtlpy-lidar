@@ -2,50 +2,56 @@ import numpy as np
 import open3d as o3d
 import cv2
 import pathlib
-from dtlpylidar.utilities.converters.base_converter import BaseToPCDConverter
+from dtlpylidar.utilities.converters.base_converter import PCDConverter, DownsampleConfig
 
 
-class PngToPCD(BaseToPCDConverter):
-    extension = ".png"  # Default extension
-
-    def __init__(self, extension=None):
+class PngToPCD(PCDConverter):
+    def __init__(self, extension: str = ".png"):
         super().__init__(extension=extension)
 
-    def convert_file(self, input_file, output_file=None, 
+    def convert_file(self, input_file: str, output_file: str = None,
+                     transform_matrix: np.ndarray = None, downsample_config: DownsampleConfig = None,
                      intrinsics: dict = None, 
                      depth_scale: float = 1000.0, 
-                     color_file = None, 
+                     color_file: str = None, 
                      **kwargs):
         """
         Convert a PNG file to a PCD file.
-        :param input_file: The path to the input PNG file.
-        :param output_file: The path to the output PCD file.
-        :param intrinsics: The intrinsics of the camera.
-            Example:
-            {
-                'fx': 1000,
-                'fy': 1000,
-                'cx': 100,
-                'cy': 100,
-                'near': 0.0,
-                'far': 100.0
-            }
-        :param depth_scale: The scale of the depth image.
-            Example:
-            1000.0 for mm to meters
-            1.0 for meters to meters
-        :return: The PCD file.
+        Args:
+            input_file: The path to the input PNG file.
+            output_file: The path to the output PCD file.
+            transform_matrix: Transformation matrix to apply to the point cloud
+            downsample_config: Downsample configuration to apply to the point cloud
+            intrinsics: The intrinsics of the camera.
+                Example:
+                {
+                    'fx': 1000,
+                    'fy': 1000,
+                    'cx': 100,
+                    'cy': 100,
+                    'near': 0.0,
+                    'far': 100.0
+                }
+            depth_scale: The scale of the depth image.
+                Example:
+                1000.0 for mm to meters
+                1.0 for meters to meters
+            color_file: The path to the color image file.
+                Example:
+                "path/to/color.png"
+        Returns:
+            o3d.geometry.PointCloud: The converted point cloud
         """
         if intrinsics is None:
             raise ValueError("Intrinsics are required")
         
         # Get image dimensions
-        depth_img = cv2.imread(str(input_file))
+        depth_img = cv2.imread(input_file)
         height, width = depth_img.shape[:2]
 
         # Get color image
         if color_file is not None:
-            color_img = cv2.imread(str(color_file))
+            color_img = cv2.imread(color_file)
 
             if (color_img is not None) and (color_img.shape[:2] != (height, width)):
                 raise ValueError("Color image dimensions do not match depth image dimensions")
@@ -91,61 +97,11 @@ class PngToPCD(BaseToPCDConverter):
             valid_colors = colors[valid_mask]
             pcd.colors = o3d.utility.Vector3dVector(valid_colors)
 
+        pcd = self.transform_and_downsample(
+            pcd=pcd, 
+            output_file=output_file, 
+            transform_matrix=transform_matrix,
+            downsample_config=downsample_config
+        )
+        self.save_pcd(pcd=pcd, save_filename=output_file, check_size=False)
         return pcd
-
-    def convert_folder(self, input_folder, output_folder=None, 
-                       intrinsics: dict = None, 
-                       depth_scale: float = 1000.0, 
-                       color_folder = None, 
-                       **kwargs):
-        """
-        Convert a folder of PNG files to a PCD files.
-        :param input_folder: The path to the input folder.
-        :param output_folder: The path to the output folder.
-        :param intrinsics: The intrinsics of the camera.
-            Example:
-            {
-                'fx': 1000,
-                'fy': 1000,
-                'cx': 100,
-                'cy': 100,
-                'near': 0.0,
-                'far': 100.0
-            }
-        :param depth_scale: The scale of the depth image.
-            Example:
-            1000.0 for mm to meters
-            1.0 for meters to meters
-        :param color_folder: The path to the color folder.
-        :return: The PCD files.
-        """
-        sorted_flag = kwargs.get("sorted", False)
-        kwargs.update({
-            'intrinsics': intrinsics,
-            'depth_scale': depth_scale
-        })
-
-        extension = self.extension
-        if not extension.startswith("."):
-            extension = f".{extension}"
-        
-        data_filepaths = pathlib.Path(input_folder).rglob(f"*{extension}")
-        if color_folder is not None:
-            data_filepaths = sorted(data_filepaths)
-            color_filepaths = sorted(pathlib.Path(color_folder).rglob(f"*{extension}"))
-        elif sorted_flag:
-            data_filepaths = sorted(data_filepaths)
-        
-        output_results = []
-        for idx, data_filepath in enumerate(data_filepaths):
-            output_filepath = pathlib.Path(output_folder).joinpath(data_filepath.with_suffix(".pcd").relative_to(input_folder))
-            if color_folder is not None:
-                color_filepath = color_filepaths[idx]
-                kwargs.update({
-                    'color_file': color_filepath
-                })
-            output_result = self.convert_file(input_file=data_filepath, output_file=output_filepath, **kwargs)
-            output_results.append(output_result)
-        
-        print(f"Successfully converted {len(output_results)} files")
-        return output_results
