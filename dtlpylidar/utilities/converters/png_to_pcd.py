@@ -11,10 +11,7 @@ class PngToPCD(PCDConverter):
 
     def convert_file(self, input_file: str, output_file: str = None,
                      transform_matrix: np.ndarray = None, downsample_config: DownsampleConfig = None,
-                     intrinsics: dict = None, 
-                     depth_scale: float = 1000.0, 
-                     color_file: str = None, 
-                     **kwargs):
+                     intrinsics: dict = None, depth_scale: float = 1000.0, color_file: str = None, **kwargs):
         """
         Convert a PNG file to a PCD file.
         Args:
@@ -23,12 +20,13 @@ class PngToPCD(PCDConverter):
             transform_matrix: Transformation matrix to apply to the point cloud
             downsample_config: Downsample configuration to apply to the point cloud
             intrinsics: The intrinsics of the camera.
-                Example:
+                Example (Orthographic camera):
                 {
-                    'fx': 1000,
-                    'fy': 1000,
-                    'cx': 100,
-                    'cy': 100,
+                    'fx': 1.0,
+                    'fy': 1.0,
+                    'cx': 0.0,
+                    'cy': 0.0,
+                    'skew': 0.0,
                     'near': 0.0,
                     'far': 100.0
                 }
@@ -46,12 +44,12 @@ class PngToPCD(PCDConverter):
             raise ValueError("Intrinsics are required")
         
         # Get image dimensions
-        depth_img = cv2.imread(input_file)
+        depth_img = cv2.imread(input_file, cv2.IMREAD_ANYDEPTH)
         height, width = depth_img.shape[:2]
 
         # Get color image
         if color_file is not None:
-            color_img = cv2.imread(color_file)
+            color_img = cv2.imread(color_file, cv2.IMREAD_COLOR)
 
             if (color_img is not None) and (color_img.shape[:2] != (height, width)):
                 raise ValueError("Color image dimensions do not match depth image dimensions")

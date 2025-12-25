@@ -116,6 +116,7 @@ class PCDConverter:
         
         return pcd
 
+    # NOTE: Useful to convert non-ASCII pcd files to ASCII
     def convert_file(self, input_file: str, output_file: str = None, 
                      transform_matrix: np.ndarray = None, downsample_config: DownsampleConfig = None, **kwargs):
         """
