@@ -1,3 +1,5 @@
+import numpy as np
+import math
 from . import extrinsic_calibrations
 
 
@@ -17,6 +19,35 @@ class Intrinsic:
         self.cy = cy
         self.skew = skew
         self.intrinsicMatrix = [fx, skew, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
+    
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray):
+        """
+        Intrinsic matrix to Intrinsic object.
+        :param matrix: 3x3 or 4x4 intrinsic matrix
+        :return:
+        """
+        if matrix.shape != (3, 3) and matrix.shape != (4, 4):
+            raise ValueError(f"Invalid intrinsic matrix shape: {matrix.shape}")
+
+        return cls(fx=matrix[0, 0], fy=matrix[1, 1], cx=matrix[0, 2], cy=matrix[1, 2], skew=matrix[0, 1])
+
+    @classmethod
+    def from_fov(cls, fov_horizontal: float, fov_vertical: float, width: int, height: int):
+        """
+        Calculate intrinsics from FOV using actual image dimensions
+        :param fov_horizontal: Horizontal FOV in degrees
+        :param fov_vertical: Vertical FOV in degrees
+        :param width: Image width
+        :param height: Image height
+        :return: Intrinsic object
+        """
+        fx = width / (2.0 * math.tan(math.radians(fov_horizontal / 2.0)))
+        fy = height / (2.0 * math.tan(math.radians(fov_vertical / 2.0)))
+        cx = width / 2.0
+        cy = height / 2.0
+
+        return cls(fx=fx, fy=fy, cx=cx, cy=cy, skew=0.0)
 
     def to_json(self, distortion=None):
         """

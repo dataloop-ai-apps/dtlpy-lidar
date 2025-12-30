@@ -1,3 +1,4 @@
+import numpy as np
 from scipy.spatial.transform import Rotation as R
 import logging
 
@@ -81,12 +82,13 @@ class EulerRotation:
         self.y = y
         self.z = z
 
-    def euler_to_quaternion(self):
+    def euler_to_quaternion(self, degrees: bool = False):
         """
         Change Euler's rotation to Quaternion rotation
+        :param degrees: If True, angles are in degrees; if False, angles are in radians (default: False)
         :return:
         """
-        return R.from_euler('xyz', [self.x, self.y, self.z]).as_quat()
+        return R.from_euler('xyz', [self.x, self.y, self.z], degrees=degrees).as_quat()
 
     def to_json(self):
         """
@@ -95,7 +97,7 @@ class EulerRotation:
         :return:
         """
         quaternion = self.euler_to_quaternion()
-        quaternion_rotation = QuaternionRotation(quaternion[0], quaternion[1], quaternion[2], quaternion[3])
+        quaternion_rotation = QuaternionRotation(*quaternion)
         return quaternion_rotation.to_json()
 
     def get_rotation_vec(self):
@@ -117,6 +119,23 @@ class Extrinsic:
             raise TypeError('rotation must be an instance of QuaternionRotation or EulerRotation')
         self.rotation = rotation
         self.translation = translation
+
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray):
+        """
+        Extrinsic matrix to Extrinsic object.
+        :param matrix: 4x4 extrinsic matrix
+        :return:
+        """
+        if matrix.shape != (4, 4):
+            raise ValueError(f"Invalid extrinsic matrix shape: {matrix.shape}")
+        
+        quaternion = R.from_matrix(matrix[:3, :3]).as_quat().tolist()
+        translation = matrix[:3, 3].tolist()
+        return cls(
+            rotation=QuaternionRotation(*quaternion),
+            translation=Translation(*translation)
+        )
 
     def to_json(self, translation_key):
         """
