@@ -9,6 +9,11 @@ from dtlpylidar.utilities import transformations as transformations
 
 
 def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
+    input_folder = os.path.realpath(input_folder)
+    output_folder = os.path.realpath(output_folder)
+    if not os.path.isdir(input_folder):
+        raise ValueError(f"Input folder does not exist: {input_folder}")
+
     if apply_transformation is True:
         poses_filepath = os.path.join(input_folder, 'poses.json')
         with open(poses_filepath, 'rb') as fp:
@@ -23,6 +28,10 @@ def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
 
     # Process each .pkl file
     for idx, pkl_filepath in enumerate(pkl_filepaths):
+        resolved = pkl_filepath.resolve()
+        if not str(resolved).startswith(input_folder):
+            raise ValueError(f"Path traversal detected: {pkl_filepath}")
+
         if apply_transformation is True:
             pose_data = poses_data[idx]
         else:
@@ -32,7 +41,8 @@ def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
             pkl_filepath.with_suffix(".pcd").relative_to(input_folder)
         )
         try:
-            # Load the .pkl file
+            # SECURITY: pickle.load can execute arbitrary code. Only use with
+            # trusted PandasET dataset files. See CWE-502.
             with open(pkl_filepath, 'rb') as file:
                 data = pickle.load(file)
 

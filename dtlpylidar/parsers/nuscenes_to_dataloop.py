@@ -1,5 +1,6 @@
 from dtlpylidar.parser_base import extrinsic_calibrations
 from dtlpylidar.parser_base import images_and_pcds, camera_calibrations, lidar_frame, lidar_scene
+import ast
 import os.path
 import dtlpy as dl
 import pandas as pd
@@ -80,8 +81,8 @@ class NuscenesToDataloop:
                         'distortion': camera_calibrations.Distortion()
                     }
 
-                    k = eval(data.get('K'))
-                    d = eval(data.get('D'))
+                    k = ast.literal_eval(data.get('K'))
+                    d = ast.literal_eval(data.get('D'))
                     if len(k) >= 7:
                         self.intrinsic_calibrations[idx][full_camera_path]['intrinsic'] = camera_calibrations.Intrinsic(
                             fx=float(k[0]),
