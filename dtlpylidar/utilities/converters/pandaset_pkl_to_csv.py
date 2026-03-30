@@ -5,6 +5,11 @@ import pandas as pd
 
 
 def convert_pkl_to_csv(input_folder, output_folder):
+    input_folder = os.path.realpath(input_folder)
+    output_folder = os.path.realpath(output_folder)
+    if not os.path.isdir(input_folder):
+        raise ValueError(f"Input folder does not exist: {input_folder}")
+
     # List all .pkl files in the input folder
     pkl_filepaths = sorted(pathlib.Path(input_folder).rglob('*.pkl'))
 
@@ -14,12 +19,17 @@ def convert_pkl_to_csv(input_folder, output_folder):
 
     # Process each .pkl file
     for pkl_filepath in pkl_filepaths:
+        if not pkl_filepath.exists():
+            print(f"File not found, skipping: {pkl_filepath}")
+            continue
+
         csv_file_path = os.path.join(
             output_folder,
             pkl_filepath.with_suffix(".pcd").relative_to(input_folder)
         )
         try:
-            # Load the .pkl file
+            # SECURITY: pickle.load can execute arbitrary code. Only use with
+            # trusted PandasET dataset files. See CWE-502.
             with open(pkl_filepath, 'rb') as file:
                 data = pickle.load(file)
 
