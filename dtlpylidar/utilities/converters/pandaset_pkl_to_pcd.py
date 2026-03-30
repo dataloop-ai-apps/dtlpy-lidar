@@ -28,9 +28,9 @@ def convert_pkl_to_pcd(input_folder, output_folder, apply_transformation=True):
 
     # Process each .pkl file
     for idx, pkl_filepath in enumerate(pkl_filepaths):
-        resolved = pkl_filepath.resolve()
-        if not str(resolved).startswith(input_folder):
-            raise ValueError(f"Path traversal detected: {pkl_filepath}")
+        if not pkl_filepath.exists():
+            print(f"File not found, skipping: {pkl_filepath}")
+            continue
 
         if apply_transformation is True:
             pose_data = poses_data[idx]
