@@ -9,3 +9,6 @@ jupyterlab>=4.4.8 # not directly required, pinned by Snyk to avoid a vulnerabili
 nbconvert>=7.17.0 # not directly required, pinned by Snyk to avoid a vulnerability
 setuptools>=78.1.1 # not directly required, pinned by Snyk to avoid a vulnerability
 zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
+jupyter-core>=5.8.0 # not directly required, pinned by Snyk to avoid a vulnerability
+pygments>=2.20.0 # not directly required, pinned by Snyk to avoid a vulnerability
+tornado>=6.5.5 # not directly required, pinned by Snyk to avoid a vulnerability
