@@ -182,7 +182,6 @@ def create_open_3d_annotations_objects(frames_item: dl.Item, frame_num: int):
                 annotation_translation=annotation_definition.position,
                 annotation_rotation=annotation_definition.rotation,
                 annotation_scale=annotation_definition.scale,
-                apply_rotation=True
             )
 
             # Get Cuboid Lines

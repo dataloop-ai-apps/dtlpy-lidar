@@ -1,4 +1,5 @@
 from . import extrinsic_calibrations
+import numpy as np
 
 
 class Intrinsic:
@@ -17,6 +18,18 @@ class Intrinsic:
         self.cy = cy
         self.skew = skew
         self.intrinsicMatrix = [fx, skew, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
+    
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray):
+        """
+        Intrinsic matrix to Intrinsic object.
+        :param matrix: 3x3 or 4x4 intrinsic matrix
+        :return:
+        """
+        if matrix.shape != (3, 3) and matrix.shape != (4, 4):
+            raise ValueError(f"Invalid intrinsic matrix shape: {matrix.shape}")
+
+        return cls(fx=matrix[0, 0], fy=matrix[1, 1], cx=matrix[0, 2], cy=matrix[1, 2], skew=matrix[0, 1])
 
     def to_json(self, distortion=None):
         """
@@ -43,12 +56,21 @@ class Distortion:
         Radial distortion coefficients: k1, k2, k3, k4, k5, k6, k7, k8.\n
         Tangential distortion coefficients: p1, p2.
         """
+        supported_parameters = [
+            "k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8",
+            "p1", "p2", 
+            "xi",  # MEI camera model parameter
+            "r0",  # Custom0 camera model parameter
+            "model",  # Camera model type
+        ]
         for key, value in kwargs.items():
+            if key not in supported_parameters:
+                raise ValueError(f"Unsupported distortion parameter: {key}")
             setattr(self, key, value)
 
     def to_json(self):
         """
-        Distortion object to dict
+        Distortion object to json.
         :return:
         """
         return self.__dict__
