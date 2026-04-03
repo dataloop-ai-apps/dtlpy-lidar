@@ -3,6 +3,7 @@ from scipy.spatial.transform import Rotation as R
 import open3d as o3d
 from dtlpylidar.parser_base.extrinsic_calibrations import Translation, QuaternionRotation, EulerRotation
 import math
+from typing import Union
 
 
 def rotation_matrix_from_euler(rotation_x=0.0, rotation_y=0.0, rotation_z=0.0, degrees: bool = False, seq: str = "xyz"):
@@ -96,6 +97,30 @@ def rotation_matrix_from_transform_matrix(transform_matrix=np.identity(4)):
     return transform_matrix[0: 3, 0: 3]
 
 
+def rotation_matrix_from_any_rotation(rotation=np.identity(3), degrees: bool = False, seq="xyz"):
+    """
+    Convert rotation array to rotation matrix
+    :param rotation: 3x3 - Rotation matrix, 3x1 - Euler angles (with seq) or 4x1 - Quaternion, 4x4 - Transform matrix
+    :param degrees: True for Degree rotations, False for Radian rotations.
+    :param seq: Euler angles sequence
+    :return: 3x3 rotation matrix
+    """
+    if isinstance(rotation, list):
+        rotation = np.array(rotation)
+
+    if rotation.shape == (3, 3):  # Rotation matrix
+        pass  # NOTE: No change needed
+    elif rotation.shape == (3, ):  # Euler angles sequence
+        rotation = rotation_matrix_from_euler(*rotation, degrees=degrees, seq=seq)
+    elif rotation.shape == (4, ):  # Quaternion
+        rotation = rotation_matrix_from_quaternion(*rotation)
+    elif rotation.shape == (4, 4):  # Transform matrix
+        rotation = rotation_matrix_from_transform_matrix(transform_matrix=rotation)
+    else:
+        raise Exception('Shape of rotation matrix is not valid. Must be 3x3, 3x1 or 4x1')
+    return rotation
+
+
 def calc_translation_matrix(position_x=0.0, position_y=0.0, position_z=0.0):
     """
     Calculate translation matrix from position (x,y,z)
@@ -151,15 +176,17 @@ def calc_rotation_matrix(theta_x=0.0, theta_y=0.0, theta_z=0.0, degrees: bool = 
     return rotation
 
 
-def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3)):
+def calc_transform_matrix(rotation=np.identity(n=3), position=np.zeros(3), seq: str = "xyz"):
     """
     Calculate transform matrix from rotation matrix and position
-    :param rotation: 3x3 matrix
-    :param position: 3x1 vector
+    :param rotation: 3x3 - Rotation matrix, 3x1 - Euler angles (with seq) or 4x1 - Quaternion, 4x4 - Transform matrix
+    :param position: 3x1 - Translation vector
+    :param seq: Euler angles sequence
     :return: 4x4 transform matrix
     """
+    rotation_matrix = rotation_matrix_from_any_rotation(rotation=rotation, seq=seq)
     transform_matrix = np.identity(n=4)
-    transform_matrix[0: 3, 0: 3] = rotation
+    transform_matrix[0: 3, 0: 3] = rotation_matrix
     transform_matrix[0: 3, 3] = position
     return transform_matrix
 
@@ -224,7 +251,7 @@ def calc_cuboid_scene_transform_matrix(cuboid_position=np.zeros(3), cuboid_quate
     return new_cuboid_transform_matrix
 
 
-def translate_point_cloud(points, translation: Translation):
+def translate_point_cloud(points: np.ndarray, translation: Translation):
     """
     Translate point cloud by x,y,z position
     :param points:
@@ -234,7 +261,7 @@ def translate_point_cloud(points, translation: Translation):
     return points - np.asarray(translation.get_translation_vec())
 
 
-def rotate_point_cloud(points, rotation):
+def rotate_point_cloud(points: np.ndarray, rotation: Union[EulerRotation, QuaternionRotation]):
     """
     Rotate point cloud by euler or quaternion rotation
     :param points:
@@ -245,14 +272,9 @@ def rotate_point_cloud(points, rotation):
         raise Exception('rotation must be of type Euler or Quaternion rotation')
     rotation_vec = rotation.get_rotation_vec()
     if isinstance(rotation, EulerRotation):
-        rotation_matrix = rotation_matrix_from_euler(rotation_x=rotation_vec[0],
-                                                     rotation_y=rotation_vec[1],
-                                                     rotation_z=rotation_vec[2])
+        rotation_matrix = rotation_matrix_from_euler(*rotation_vec)
     else:
-        rotation_matrix = rotation_matrix_from_quaternion(quaternion_x=rotation_vec[0],
-                                                          quaternion_y=rotation_vec[1],
-                                                          quaternion_z=rotation_vec[2],
-                                                          quaternion_w=rotation_vec[3])
+        rotation_matrix = rotation_matrix_from_quaternion(*rotation_vec)
 
     return np.dot(np.linalg.inv(rotation_matrix), points.transpose()).transpose()
 
